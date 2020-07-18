@@ -1,0 +1,16 @@
+create a simple socket server
+- server should be able to receive data from the client
+- the received data should be saved into a tempdir as a file
+- the server should then execute the saved file as a python program (with a timeout)
+- the server should then save whats sent to stdout and store to file
+- send the new file back to the client
+
+containerize the server in a docker image
+- https://docs.docker.com/get-started/
+- use https://hub.docker.com/_/python as base (simple tag 3.8-buster)
+
+make a client that takes input via discord messages
+- parses for ```python
+             ```
+- send whats within as a file over sockets to the server
+- awaits response and messages it back as text to the original message channel
