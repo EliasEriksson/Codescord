@@ -1,12 +1,12 @@
 from typing import *
 import socket
 import asyncio
-from io import BytesIO
+from math import ceil
 
 
 test_code = """
-var = "asd"
-print(var)
+var = "asddd"
+print(var + "2")
 """
 
 
@@ -17,42 +17,59 @@ def setup_socket() -> socket.socket:
 
 
 class Client:
+    FAILURE = b"0"
+    SUCCESS = b"1"
+    BUFFER_SIZE = 128
+
     def __init__(self, loop=None) -> None:
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
+        self.actions = {
+            "stdout": self.handle_stdout
+        }
 
     def close(self) -> None:
         self.socket.close()
 
-    async def receive(self) -> str:
-        print("starting to receive data from server...")
-        result = b""
-        while data := await self.loop.sock_recv(self.socket, 128):
-            result += data
-        print("received result from server.")
-        return result.decode("utf-8")
-
     async def send_action(self, action: str) -> bool:
         await self.loop.sock_sendall(self.socket, action.encode("utf-8"))
-        status = (await self.loop.sock_recv(self.socket, 128)).decode("utf-8")
-        if status == "OK":
+        status = await self.loop.sock_recv(self.socket, self.BUFFER_SIZE)
+        if status == self.SUCCESS:
             return True
         return False
 
     async def send(self, code: str) -> None:
-        print("starting to send code to server...")
         payload = code.encode("utf-8")
         if await self.send_action(f"file:{len(payload)}"):
             await self.loop.sock_sendall(self.socket, payload)
-        print("code sent to server.")
+
+    async def receive_stdout(self, size: int) -> str:
+        result = b""
+        for _ in range(ceil(size / self.BUFFER_SIZE)):
+            result += await self.loop.sock_recv(self.socket, self.BUFFER_SIZE)
+        return result.decode("utf-8")
+
+    async def handle_stdout(self, action_args: Tuple[str]):
+        size = int(*action_args)
+        result = await self.receive_stdout(size)
+        # hook up discord here instead of prints
+        print("server result:")
+        print(result)
+
+    async def receive_action(self) -> str:
+        action = (await self.loop.sock_recv(self.socket, self.BUFFER_SIZE)).decode("utf-8")
+        await self.loop.sock_sendall(self.socket, self.SUCCESS)
+        return action
+
+    async def handle_receive(self):
+        action, *args = (await self.receive_action()).split(":")
+        if action in self.actions:
+            await self.actions[action](args)
 
     async def connect(self) -> None:
-        print("awaiting server for connection")
         await self.loop.sock_connect(self.socket, ("localhost", 6969))
-        print("connected with the server.")
         await self.send(test_code)
-        result = await self.receive()
-        print(result)
+        await self.handle_receive()
 
     async def run(self) -> None:
         try:

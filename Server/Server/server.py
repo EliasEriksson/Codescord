@@ -3,6 +3,8 @@ import socket
 import asyncio
 import tempfile
 from pathlib import Path
+from math import ceil
+from .errors import ProcessTimedOut
 
 
 script_name = "script.py"
@@ -18,62 +20,69 @@ def setup_socket() -> socket.socket:
 
 
 class Server:
+    FAILURE = b"0"
+    SUCCESS = b"1"
+    BUFFER_SIZE = 128
+
     def __init__(self, loop=None) -> None:
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
+        self.actions = {
+            "file": self.handle_file,
+        }
 
     def close(self) -> None:
         self.socket.close()
 
     @staticmethod
     async def run_script(script_path: Union[str, Path]) -> bytes:
-        print(f"running {script_path} ...")
         process = await asyncio.create_subprocess_exec(
             "python3", script_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
         if process.returncode == 0:
-            print("finished with no errors.")
             return stdout
-        print("finished with errors.")
         return stderr
 
+    async def send_action(self, connection: socket.socket, action: str) -> bool:
+        await self.loop.sock_sendall(connection, action.encode("utf-8"))
+        status = await self.loop.sock_recv(connection, self.BUFFER_SIZE)
+        if status == self.SUCCESS:
+            return True
+        return False
+
     async def send(self, connection: socket.socket, data: bytes) -> None:
-        print("sending over the result to the client...")
-        await self.loop.sock_sendall(connection, data)
-        print("result sent.")
+        if await self.send_action(connection, f"stdout:{len(data)}"):
+            await self.loop.sock_sendall(connection, data)
 
     async def receive_file(self, connection: socket.socket, script_path: Union[str, Path], size: int):
-        received = 0
         with open(script_path, "wb") as script:
-            while received < size:
-                data = await self.loop.sock_recv(connection, 128)
-                received += 128
-                script.write(data)
+            for _ in range(ceil(size / self.BUFFER_SIZE)):
+                script.write((await self.loop.sock_recv(connection, self.BUFFER_SIZE)))
+
+    async def handle_file(self, connection: socket.socket, action_args: Tuple[str]):
+        size = int(*action_args)
+        with tempfile.TemporaryDirectory() as tempdir:
+            script_path = Path(tempdir).joinpath(script_name)
+            await self.receive_file(connection, script_path, size)
+            try:
+                result = await asyncio.wait_for(self.run_script(script_path), 30)
+            except asyncio.TimeoutError:
+                raise ProcessTimedOut()
+        await self.send(connection, result)
 
     async def receive_action(self, connection: socket.socket) -> str:
-        action = (await self.loop.sock_recv(connection, 128)).decode("utf-8")
-        await self.loop.sock_sendall(connection, b"OK")
+        action = (await self.loop.sock_recv(connection, self.BUFFER_SIZE)).decode("utf-8")
+        await self.loop.sock_sendall(connection, self.SUCCESS)
         return action
 
     async def handle_connection(self, connection: socket.socket) -> None:
-        action = await self.receive_action(connection)
-        if action:
-            if action.startswith("file:"):
-                _, size = action.split(":")
-                with tempfile.TemporaryDirectory() as tempdir:
-                    script_path = Path(tempdir).joinpath(script_name)
-                    print("created environment for connection to live in.")
-                    await self.receive_file(connection, script_path, int(size))
-                    result = await self.run_script(script_path)
-                print("connection environment no longer needed. deleting all related files.")
-                await self.send(connection, result)
+        action, *args = (await self.receive_action(connection)).split(":")
+        if action in self.actions:
+            await self.actions[action](connection, args)
 
     async def accept_connection(self) -> None:
-        print("awaiting connections...")
-        connection, ip = await self.loop.sock_accept(self.socket)
-        print(f"connection from {ip}")
+        connection, _ = await self.loop.sock_accept(self.socket)
         await self.handle_connection(connection)
-        print("work finished closing connection")
         connection.close()
 
     async def run(self) -> None:
