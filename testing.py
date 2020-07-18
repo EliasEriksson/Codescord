@@ -1,18 +1,30 @@
-import tempfile
-from pathlib import Path, PosixPath
-import subprocess
+import re
 
+simple = """```python
+print("asd")```"""
 
-with tempfile.TemporaryDirectory() as tempdir:
-    script_path = Path(tempdir).joinpath("script.py")
-    with open(script_path, "wb") as script:
-        script.write(b'print("hello world!")\n')
-    result = subprocess.run(["python3", script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode == 0:
-        print("success!")
-        print(result.stdout.decode("utf-8"))
-    else:
-        print("Crash!")
-        print(result.stderr.decode("utf-8"))
-    print(script_path)
+text = """
+not nessesarely related to discord.py, but python and discord.
+is it possible to format discord code blocks 
+```
+these
+```
+with python3 syntax
+using 
+\```python
+\```
+seams to be using python2 syntax
 
+```python
+print "hello"
+```
+
+```python
+print("hello")
+```
+"""
+
+mod = text.replace("\\```python", "").replace("\\```", "")
+valids = mod.split("```python\n")[1:]
+cleaned = [valid.rstrip().rstrip("```").rstrip() for valid in valids]
+print(cleaned)

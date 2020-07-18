@@ -6,7 +6,7 @@ from pathlib import Path
 from math import ceil
 from .errors import ProcessTimedOut
 
-
+# needs to be able to handle timeouts
 script_name = "script.py"
 
 
@@ -72,13 +72,15 @@ class Server:
 
     async def receive_action(self, connection: socket.socket) -> str:
         action = (await self.loop.sock_recv(connection, self.BUFFER_SIZE)).decode("utf-8")
-        await self.loop.sock_sendall(connection, self.SUCCESS)
         return action
 
     async def handle_connection(self, connection: socket.socket) -> None:
         action, *args = (await self.receive_action(connection)).split(":")
         if action in self.actions:
+            await self.loop.sock_sendall(connection, self.SUCCESS)
             await self.actions[action](connection, args)
+        else:
+            await self.loop.sock_sendall(connection, self.FAILURE)
 
     async def accept_connection(self) -> None:
         connection, _ = await self.loop.sock_accept(self.socket)
