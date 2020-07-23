@@ -1,30 +1,18 @@
-import re
+from typing import *
 
-simple = """```python
-print("asd")```"""
 
-text = """
-not nessesarely related to discord.py, but python and discord.
-is it possible to format discord code blocks 
-```
-these
-```
-with python3 syntax
-using 
-\```python
-\```
-seams to be using python2 syntax
+def autocast_to_annotations(func):
+    def wrapper(*args, **kwargs):
+        args = (type(arg)(value) if not isinstance(value, func.__annotations__[arg]) else value
+                for arg, value in zip(func.__code__.co_varnames, args))
+        return func(*args)
+    return wrapper
 
-```python
-print "hello"
-```
+@autocast_to_annotations
+def foo(x: bool, a: str, b: str, ) -> str:
+    print(x)
+    return a + b
 
-```python
-print("hello")
-```
-"""
 
-mod = text.replace("\\```python", "").replace("\\```", "")
-valids = mod.split("```python\n")[1:]
-cleaned = [valid.rstrip().rstrip("```").rstrip() for valid in valids]
-print(cleaned)
+result = foo(True, 1, 2, asd="123")
+print(result)

@@ -1,13 +1,116 @@
-from typing import *
+from typing import Tuple
 import socket
 import asyncio
 from math import ceil
+import utils
 
 
 def setup_socket() -> socket.socket:
     sock = socket.socket()
     sock.setblocking(False)
     return sock
+
+
+class Protocol:
+    command_protocol = "protocol"
+    command_file = "file"
+    command_text = "text"
+    commands = (command_protocol, command_file, command_text)
+
+    buffer_size = 128
+
+    success = b"200"
+    failed = b"400"
+    internal_server_error = b"500"
+    not_implemented = b"501"
+
+    @classmethod
+    def get_protocol(cls):
+        # non callable attributes and their values
+        protocol = [f"{attr}={value}" for attr in dir(cls)
+                    if not (callable((value := getattr(cls, attr))) or attr.startswith("__"))]
+
+        return ":".join(protocol)
+
+
+class C:
+    def __init__(self, loop=None) -> None:
+        self.socket = setup_socket()
+        self.loop = loop if loop else asyncio.get_event_loop()
+
+    def close(self) -> None:
+        self.socket.close()
+        self.socket = setup_socket()
+
+    async def authenticate(self) -> bool:
+        await self.loop.sock_connect(self.socket, ("localhost", 6969))
+        response = await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+        if response == Protocol.success:
+            payload = Protocol.get_protocol().encode("utf-8")
+            await self.loop.sock_sendall(self.socket, f"{Protocol.command_protocol}:{len(payload)}".encode("utf-8"))
+            await self.loop.sock_sendall(self.socket, payload)
+            response = await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+            if response == Protocol.success:
+                return True
+            elif response == Protocol.failed:
+                return False
+            else:
+                # non understandable response, not speaking the same protocol
+                raise ConnectionAbortedError
+        else:
+            # no response from server
+            raise ConnectionAbortedError
+
+    async def send_file(self, code: str) -> bool:
+        payload = code.encode("utf-8")
+        await self.loop.sock_sendall(self.socket, f"{Protocol.command_file}:{len(payload)}".encode("utf-8"))
+        response = await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+        if response == Protocol.success:
+            await self.loop.sock_sendall(self.socket, payload)
+            response = await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+            if response == Protocol.success:
+                return True
+            elif response == Protocol.failed:
+                return False
+            else:
+                # unknown transmission error
+                raise ConnectionAbortedError
+        else:
+            # unknown transmission error
+            raise ConnectionAbortedError
+
+    async def receive_result(self) -> str:
+        response = await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+        command, *args = response.decode("utf-8").split(":")
+        if command == Protocol.command_text:
+            size = int(*args)
+            result = b""
+            for _ in range(ceil(size / Protocol.buffer_size)):
+                result += await self.loop.sock_recv(self.socket, Protocol.buffer_size)
+            await self.loop.sock_sendall(self.socket, Protocol.success)
+            return result.decode("utf-8")
+        else:
+            # not implemented
+            raise ConnectionAbortedError
+
+    async def process(self, code: str) -> str:
+        if not await self.authenticate():
+            raise ConnectionAbortedError
+        if not await self.send_file(code):
+            raise ConnectionAbortedError
+        result = await self.receive_result()
+
+        return result
+
+    async def run(self, code: str) -> str:
+        try:
+            return await self.process(code)
+        except (KeyboardInterrupt, ConnectionRefusedError):
+            pass
+        except Exception as e:
+            self.close()
+            raise e
+        self.close()
 
 
 class Client:
@@ -75,3 +178,6 @@ class Client:
         except ConnectionRefusedError:
             await self.close()
 
+
+if __name__ == '__main__':
+    print(Protocol)

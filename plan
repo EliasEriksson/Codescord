@@ -14,3 +14,61 @@ make a client that takes input via discord messages
              ```
 - send whats within as a file over sockets to the server
 - awaits response and messages it back as text to the original message channel
+
+socket server / client communication
+#- server starts and awaits connections
+#- client connects to client
+#- server asks client for communication protocol
+#- client sends command for communication protocol `protocol:size`
+#- client sends protocol
+#- server answers with communication successful and awaits client for further transitions
+#- client sends a colon separated string on format `command:commandargs:..`
+    -- command `file:filetype:size`
+       #- server responds and awaits the client to send data with set size
+       #- client sends data
+       #- server receives chunks and saves it acording to the filetype
+#- server sends a message confirming the received data
+#- server processes the data
+#- ...
+#- server sends command to client to accept a text transmission (text command)
+#- server sends the result of processed data to client
+#- client sends communication success
+- communication ends
+
+
+
+
+
+socket server / client communication V2
+#- server starts and awaits connections
+#- client connects to client
+
+#- client sends the server a command (initially the communication protocol to authenticate)
+#- server sends success back to inform int understands whats happening
+#- client sends the server the communication protocol
+#- server sends success back if data was retrieved successfully
+#- server sends success back if protocols are matching
+
+#- client sends a command (will be file transfer command second time)
+#- server sends success back to inform it understands whats happening
+#- client sends the payload over to the server
+#- server sends success back if data was retrieved successfully
+
+#- server processes the payload
+#- ...
+
+#- server sends command to the client (text command)
+#- client sends success back
+#- server sends the payload
+#- client sends success back
+
+#- client sends close connection
+#- server sends success back
+#- client and server closes the connection
+
+
+
+
+
+
+
