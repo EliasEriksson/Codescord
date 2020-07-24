@@ -22,7 +22,7 @@ class Protocol:
         close = b"600"
 
     @classmethod
-    def get_protocol(cls):
+    def get_protocol(cls) -> str:
         attrs = []
         for attr in dir(cls):
             if attr.startswith("__"):
@@ -35,7 +35,7 @@ class Protocol:
 
             else:
                 attrs.append(f"{attr}, {value}")
-        return attrs
+        return ":".join(attrs)
 
 
 __all__ = ["Protocol", "cast_to_annotations"]

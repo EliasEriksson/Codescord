@@ -62,7 +62,6 @@ class Server:
         :return: blob
         """
         blob = b""
-
         for _ in range(ceil(size / utils.Protocol.buffer_size)):
             blob += await self.loop.sock_recv(connection, utils.Protocol.buffer_size)
         await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
