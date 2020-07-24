@@ -1,28 +1,26 @@
 import discord
-from Client.client import Client as PyscordClient
+import Codescord
 import re
 
 
 class Client(discord.Client):
     def __init__(self):
         super(Client, self).__init__()
-        self.pyscord_client = PyscordClient(self.loop)
+        self.codescord_client = Codescord.client.Client(self.loop)
         self.code_pattern = re.compile(r"```(\w+)\n([^=`]+)```", re.DOTALL)
-        self.languages = {
-            "python": self.handle_python
-        }
 
-    async def on_ready(self):
+    @staticmethod
+    async def on_ready():
         print("bot online")
 
-    async def handle_python(self, code: str) -> str:
-        return await self.pyscord_client.connect(code)
+    async def on_message_edit(self) -> None:
+        pass
 
     async def on_message(self, message: discord.Message) -> None:
-        if match := self.code_pattern.search(message.content):
-            language, code = match.groups()
-            if language in self.languages:
-                result = await self.languages[language](code)
+        if message.author != self.user:
+            if match := self.code_pattern.search(message.content):
+                source = Codescord.Source(*match.groups())
+                stdout = await self.codescord_client.run(source)
                 await message.channel.send(
-                    f"Result from {message.id}:\n```{result}```"
+                    f"```{stdout}```"
                 )

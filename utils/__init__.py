@@ -29,12 +29,12 @@ class Protocol:
                 continue
             if callable((value := getattr(cls, attr))):
                 if "__func__" not in dir(value):
-                    for iattr in dir(value):
-                        if not iattr.startswith("__"):
-                            attrs.append(f"{iattr}={getattr(getattr(cls, attr), iattr)}")
-
+                    for inner_attr in dir(value):
+                        if not inner_attr.startswith("__"):
+                            attrs.append(f"{inner_attr}={getattr(getattr(cls, attr), inner_attr)}")
             else:
-                attrs.append(f"{attr}, {value}")
+                attrs.append(f"{attr}={value}")
+        attrs.sort()
         return ":".join(attrs)
 
 
