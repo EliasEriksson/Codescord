@@ -12,9 +12,10 @@ def run() -> None:
 
     loop = asyncio.get_event_loop()
     client = Codescord.client.Client(loop)
-    loop.run_until_complete(
+    result = loop.run_until_complete(
         client.run(source)
     )
+    print(result)
 
 
 def run_as_discord():
