@@ -1,7 +1,10 @@
 def cast_to_annotations(func):
     def wrapper(*args):
+        print(len(args))
+        print(args)
         args = (type(arg)(value) if not isinstance(value, func.__annotations__[arg]) else value
-                for arg, value in zip(func.__code__.co_varnames, args))
+                for arg, value in zip(func.__code__.co_varnames, args)
+                )
         return func(*args)
     return wrapper
 
