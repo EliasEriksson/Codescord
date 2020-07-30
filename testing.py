@@ -5,7 +5,10 @@ def autocast_to_annotations(func):
     def wrapper(*args, **kwargs):
         # inspecting args
         args = list(args)
-        m = dict(list(zip(func.__code__.co_varnames, range(len(func.__code__.co_varnames))))[:(func.__code__.co_argcount)])
+        m = dict(list(zip(
+                func.__code__.co_varnames, range(len(func.__code__.co_varnames)))
+            )[:func.__code__.co_argcount]
+        )
         for arg, index in m.items():
             if arg in func.__annotations__:
                 t = func.__annotations__[arg]
@@ -23,6 +26,7 @@ def autocast_to_annotations(func):
 
         return func(*args, **kwargs)
     return wrapper
+
 
 @autocast_to_annotations
 def foo(x: bool, a: str, b: str, ) -> str:

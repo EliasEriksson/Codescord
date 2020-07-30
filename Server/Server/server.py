@@ -91,7 +91,7 @@ class Server:
         # client successfully received stdout
 
     @utils.cast_to_annotations
-    async def handle_file(self: "Server", connection: socket.socket, language: str, size: int) -> None:
+    async def handle_file(self, connection: socket.socket, language: str, size: int) -> None:
         """
         downloads a file from the client, executes it and sends the result back to the client
 
@@ -130,8 +130,9 @@ class Server:
             print("unsupported language, sending not implemented back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
             print("successfully send not implemented")
+
     @utils.cast_to_annotations
-    async def handle_protocol(self: "Server", connection: socket.socket, size: int) -> None:
+    async def handle_protocol(self, connection: socket.socket, size: int) -> None:
         """
         verifies that the client and server speaks the same protocol
 
@@ -173,14 +174,14 @@ class Server:
             print("instruction received.")
             instruction, *args = response.decode("utf-8").split(":")
             if instruction not in self.instructions:
-                print("instruction valid.")
+                print("instruction invalid.")
                 await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
                 raise AssertionError(f"instruction {instruction}, is not implemented in server")
             try:
                 print(response)
                 print(args)
                 print(self.instructions[instruction])
-                self.instructions[instruction](connection, *args)
+                await self.instructions[instruction](connection, *args)
             except BrokenPipeError as e:
                 print("client socket is closed")
                 connection.close()
