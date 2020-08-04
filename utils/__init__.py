@@ -34,6 +34,7 @@ class Protocol:
         text = "text"
 
     class StatusCodes:
+        advance = b"100"
         success = b"200"
         failed = b"400"
         internal_server_error = b"500"
@@ -61,4 +62,4 @@ __all__ = ["Protocol", "cast_to_annotations"]
 
 
 if __name__ == '__main__':
-    print(P.get_protocol())
+    print(Protocol.get_protocol())

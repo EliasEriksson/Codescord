@@ -53,13 +53,10 @@ class Server:
         """
         self.socket.close()
 
-    async def assert_response_status(self, status: Union[int, bytes]) -> None:
-        print("awaiting status from client")
-        response = await self.loop.sock_recv(self.socket, utils.Protocol.buffer_size)
+    async def assert_response_status(self, connection: socket.socket, status: Union[int, bytes]) -> None:
+        response = await self.loop.sock_recv(connection, utils.Protocol.buffer_size)
         if response != status:
-            print(f"status was not {status}")
             raise AssertionError(f"expected status: {status}, got: {response} instead.")
-        print("recieved expected response from client")
 
     async def download(self, connection: socket.socket, size: int) -> bytes:
         """
@@ -70,13 +67,9 @@ class Server:
         :return: blob
         """
         blob = b""
-        print("prepared to download")
         for _ in range(ceil(size / utils.Protocol.buffer_size)):
             blob += await self.loop.sock_recv(connection, utils.Protocol.buffer_size)
-            print("received chunk...")
-        print("download finished, sending success back to client")
         await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-        print("success message bout download sent")
         return blob
 
     async def handle_stdout(self, connection: socket.socket, stdout: bytes) -> None:
@@ -84,11 +77,10 @@ class Server:
             connection,
             f"{utils.Protocol.Instructions.text}:{len(stdout)}".encode("utf-8")
         )
-        await self.assert_response_status(utils.Protocol.StatusCodes.success)
-        # client ready to receive stdout
+        await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
         await self.loop.sock_sendall(connection, stdout)
-        await self.assert_response_status(utils.Protocol.StatusCodes.success)
-        # client successfully received stdout
+        await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
+        await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.advance)
 
     @utils.cast_to_annotations
     async def handle_file(self, connection: socket.socket, language: str, size: int) -> None:
@@ -103,33 +95,27 @@ class Server:
         :return: None
         """
         if language in self.languages:
-            print("language is supported, sending success back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-            print("successfully sent success")
             with tempfile.TemporaryDirectory() as tempdir:
                 file = Path(tempdir).joinpath(f"script.{language}")
                 content = await self.download(connection, size)
+                await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
                 with open(file, "wb") as script:
                     script.write(content)
                 try:
-                    print("starting to process file")
                     stdout = await asyncio.wait_for(self.languages[language](file), 30)
-                    print("file was successfully processed")
                 except asyncio.TimeoutError:
                     await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.internal_server_error)
                     raise Exception("implement custom exception for timout here")
-                print("sending success to indicate process of source was successful")
                 await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-                print("successfully send success")
+                await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
                 await self.handle_stdout(connection, stdout)
             await self.loop.sock_sendall(connection, utils.Protocol.Instructions.text.encode("utf-8"))
-            await self.assert_response_status(utils.Protocol.StatusCodes.success)
-            await self.assert_response_status(utils.Protocol.StatusCodes.success)
+            await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
+            await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
 
         else:
-            print("unsupported language, sending not implemented back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
-            print("successfully send not implemented")
 
     @utils.cast_to_annotations
     async def handle_protocol(self, connection: socket.socket, size: int) -> None:
@@ -144,18 +130,15 @@ class Server:
         :param size: size of the protocol message in bytes
         :return:
         """
-        print("sending success..., instuction was understood and waiting to receive ")
         await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
         client_protocol = (await self.download(connection, size)).decode("utf-8")
+        await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
         if client_protocol == utils.Protocol.get_protocol():
-            print("protocols are matching sending success back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-            print("success was sent successfully")
         else:
-            print("protocols did not match, sending internal server error back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.internal_server_error)
 
-    async def handle_connection(self) -> None:
+    async def handle_connection(self, connection: socket.socket) -> None:
         """
         connection loop. connection tries to last for as long the loop is going.
 
@@ -165,25 +148,14 @@ class Server:
         loop stops when clients sends status 600 when it is expecting an instruction
         :return: None
         """
-        print("awaiting connections...")
-        connection, *_ = await self.loop.sock_accept(self.socket)
-        print("connection established.")
-
-        print("awaiting instruction from client...")
         while (response := (await self.loop.sock_recv(connection, utils.Protocol.buffer_size))) != utils.Protocol.StatusCodes.close:
-            print("instruction received.")
             instruction, *args = response.decode("utf-8").split(":")
             if instruction not in self.instructions:
-                print("instruction invalid.")
                 await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
                 raise AssertionError(f"instruction {instruction}, is not implemented in server")
             try:
-                print(response)
-                print(args)
-                print(self.instructions[instruction])
                 await self.instructions[instruction](connection, *args)
             except BrokenPipeError as e:
-                print("client socket is closed")
                 connection.close()
                 raise e
             except Exception as e:
@@ -191,15 +163,14 @@ class Server:
                 connection.close()
                 raise e
         else:
-            print("received closing instruction sending success back")
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-            print("successfully sent success, closing down")
             connection.close()
 
     async def run(self) -> None:
         try:
             while True:
-                await self.handle_connection()
+                connection, *_ = await self.loop.sock_accept(self.socket)
+                asyncio.create_task(self.handle_connection(connection))
         except KeyboardInterrupt:
             pass
         except Exception as e:

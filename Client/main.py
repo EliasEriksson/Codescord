@@ -7,7 +7,7 @@ import os
 def run() -> None:
     source = Codescord.Source(
         language="py",
-        code="print('Hello World!'"
+        code="print('Hello World!')"
     )
 
     loop = asyncio.get_event_loop()

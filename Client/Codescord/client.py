@@ -40,16 +40,15 @@ class Client:
         if instruction == utils.Protocol.Instructions.text:
             await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.success)
             blob = await self.download(*args)
+            await self.assert_response_status(utils.Protocol.StatusCodes.advance)
             return blob.decode("utf-8")
         else:
             raise AssertionError("only text instructions can be handled by the client.")
 
     async def assert_response_status(self, status: Union[int, bytes]) -> None:
-        print(f"awaiting response from server expecting {status}")
         response = await self.loop.sock_recv(self.socket, utils.Protocol.buffer_size)
         if response != status:
             raise AssertionError(f"expected status: {status}, got: {response} instead.")
-        print(f"response code was {status} as expected")
 
     async def authenticate(self):
         payload = utils.Protocol.get_protocol().encode("utf-8")
@@ -62,58 +61,44 @@ class Client:
         await self.loop.sock_sendall(self.socket, payload)
         await self.assert_response_status(utils.Protocol.StatusCodes.success)
         # server got the message
+        await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.advance)
         await self.assert_response_status(utils.Protocol.StatusCodes.success)
         # successfully authenticated
 
     async def handle_source(self, source: Source) -> None:
         payload = source.code.encode("utf-8")
-        print("sending instruction to the server...")
         await self.loop.sock_sendall(
             self.socket,
             f"{utils.Protocol.Instructions.file}:{source.language}:{len(payload)}".encode("utf-8")
         )
-        print("instruction was sent to the server.")
-        print("awaiting success about receiving the instruction")
         await self.assert_response_status(utils.Protocol.StatusCodes.success)
-        print("instruction was sent successfully")
         # server ready to receive source
-        print("sending the source to the server...")
         await self.loop.sock_sendall(self.socket, payload)
-        print("source was sent to the server")
-        print("awaiting success about receiving the source...")
         await self.assert_response_status(utils.Protocol.StatusCodes.success)
-        print("source as sent successfully in to the server.")
+        await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.advance)
+        await self.assert_response_status(utils.Protocol.StatusCodes.success)
+        await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.advance)
+
         # server got the source
-        # await self.assert_response_status(utils.Protocol.StatusCodes.success)
         # server successfully processed the source
 
     async def handle_connection(self, source: Source) -> str:
         try:
-            print("attempting to connect to server...")
             await self.loop.sock_connect(self.socket, ("localhost", 6969))
-            print("connected with the server.")
-            print("attempting to authenticate with the server...")
             await self.authenticate()
-            print("authenticated with the server.")
-            print("attempting to send source to the server...")
             await self.handle_source(source)
-            print("source was sent to the server.")
-            print("awaiting result back from server...")
+
             response = await self.handle_stdout()
-            print("response with result received.")
             return response
         except AssertionError as e:
             # unexpected status code was received
-            print("sending close status to the server...")
             await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.close)
-            print("close status sent to the server.")
-            print("awaiting server to respond with success...")
             response = await self.loop.sock_recv(self.socket, utils.Protocol.buffer_size)
             if response == utils.Protocol.StatusCodes.success:
-                print("successfully closed the connection.")
+                pass
             else:
-                print("something went wrong when closing the connection.")
-            return "There was an unknown error processing the source"
+                pass
+            return str(e)
 
     async def run(self, source: Source) -> str:
         try:

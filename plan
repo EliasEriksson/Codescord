@@ -68,7 +68,35 @@ socket server / client communication V2
 #- client and server closes the connection
 
 
+socket server / client communication V3
+- server starts and awaits connections
+- client connects to client
 
+- client sends the server a command (initially the communication protocol to authenticate)
+- server sends success back to inform it understands whats happening
+- client sends the server the communication protocol
+- server sends success back if data was retrieved successfully
+#- client sends advance
+- server sends success back if protocols are matching
+
+- client sends a command (will be file transfer command second time)
+- server sends success back to inform it understands whats happening
+- client sends the payload over to the server
+- server sends success back if data was retrieved successfully
+#- client sends advance
+- server processes the payload
+- ...
+- server sends success back to inform process was successful
+- client sends advance
+- server sends command to the client (text command)
+- client sends success back
+- server sends the payload
+- client sends success back
+- server sends advance
+
+- client sends close connection
+- server sends success back
+- client and server closes the connection
 
 
 
