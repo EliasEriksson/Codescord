@@ -110,10 +110,6 @@ class Server:
                 await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
                 await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
                 await self.handle_stdout(connection, stdout)
-            await self.loop.sock_sendall(connection, utils.Protocol.Instructions.text.encode("utf-8"))
-            await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
-            await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
-
         else:
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
 
@@ -164,7 +160,7 @@ class Server:
                 raise e
         else:
             await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-            connection.close()
+        connection.close()
 
     async def run(self) -> None:
         try:
@@ -174,6 +170,7 @@ class Server:
         except KeyboardInterrupt:
             pass
         except Exception as e:
-            self.close()
             raise e
-        self.close()
+        finally:
+            self.close()
+

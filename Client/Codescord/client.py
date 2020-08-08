@@ -41,6 +41,7 @@ class Client:
             await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.success)
             blob = await self.download(*args)
             await self.assert_response_status(utils.Protocol.StatusCodes.advance)
+
             return blob.decode("utf-8")
         else:
             raise AssertionError("only text instructions can be handled by the client.")
@@ -87,18 +88,14 @@ class Client:
             await self.loop.sock_connect(self.socket, ("localhost", 6969))
             await self.authenticate()
             await self.handle_source(source)
-
             response = await self.handle_stdout()
             return response
+
         except AssertionError as e:
-            # unexpected status code was received
-            await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.close)
-            response = await self.loop.sock_recv(self.socket, utils.Protocol.buffer_size)
-            if response == utils.Protocol.StatusCodes.success:
-                pass
-            else:
-                pass
             return str(e)
+        finally:
+            await self.loop.sock_sendall(self.socket, utils.Protocol.StatusCodes.close)
+            await self.loop.sock_recv(self.socket, utils.Protocol.buffer_size)
 
     async def run(self, source: Source) -> str:
         try:
