@@ -41,22 +41,22 @@ class Server:
         print("closed.")
 
     async def response_as_int(self, connection: socket.socket, length=utils.Protocol.buffer_size, endian="big", signed=False) -> int:
-        print("awaiting response as int...")
+        print(f"awaiting response as int...")
         integer = int.from_bytes((await self.loop.sock_recv(connection, length)), endian, signed=signed)
-        print("got response as int.")
+        print(f"got response as int ({integer}).")
         return integer
 
     async def send_int_as_bytes(self, connection: socket.socket, integer: int, length=utils.Protocol.buffer_size, endian="big", signed=False) -> None:
-        print("sending int as bytes...")
+        print(f"sending int ({integer}) as bytes...")
         await self.loop.sock_sendall(connection, integer.to_bytes(length, endian, signed=signed))
-        print("sent int as bytes.")
+        print(f"sent int ({integer}) as bytes.")
 
-    async def assert_response_status(self, connection: socket.socket, status: Union[int, bytes]) -> None:
-        print("asserting response status...")
+    async def assert_response_status(self, connection: socket.socket, status: int) -> None:
+        print(f"asserting response status ({status})...")
         response = await self.response_as_int(connection)
         if response != status:
             raise AssertionError(f"expected status: {status}, got: {response} instead.")
-        print("response passed assertion.")
+        print(f"response passed assertion ({status}).")
 
     async def send_size(self, connection: socket.socket, size: int, endian="big", signed=False) -> None:
         print("sending size...")

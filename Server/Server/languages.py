@@ -8,17 +8,21 @@ class Languages:
     async def cpp(file: Union[Path, str]) -> bytes:
         executable = "executable"
         process = await asyncio.create_subprocess_exec(
-            "gpp", "-o", executable, file
+            "g++", "-o", file.parent.joinpath(executable), file,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         _, stderr = await process.communicate()
         if not process.returncode == 0:
+            print(f"stderr1 {stderr}")
             return stderr
 
         process = await asyncio.create_subprocess_exec(
-            file.parent.joinpath(executable)
+            file.parent.joinpath(executable),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
         if not process.returncode == 0:
+            print(f"stderr2 {stderr}")
             return stderr
         return stdout
 
