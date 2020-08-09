@@ -25,4 +25,4 @@ def run_as_discord():
 
 
 if __name__ == '__main__':
-    run_as_discord()
+    run()

@@ -19,24 +19,11 @@ def setup_socket() -> socket.socket:
 
 class Server:
     def __init__(self, loop=None) -> None:
-        """
-        Server class that manages the execution of files inside the docker container.
-        Receives files from client over socket connection.
-        Server can utilise instructions listed in utils.Protocol.Instructions.
-        Functions to execute specific language source is found in languages.Languages
-
-        :attr socket: the servers socket clients connect to
-        :attr loop: event loop to receive/send data
-        :attr instructions: instructions mapped from utils.Protocol.Instructions to Server methods
-        :attr languages: name of languages currently supported. Must match names in highlight.js
-        (https://github.com/highlightjs/highlight.js)
-        :param loop:
-        """
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
         self.instructions = {
-            utils.Protocol.Instructions.protocol: self.handle_protocol,
-            utils.Protocol.Instructions.file: self.handle_file,
+            utils.Protocol.authenticate: self.authenticate,
+            utils.Protocol.file: self.handle_file,
         }
         self.languages = {
             "python": Languages.python,
@@ -47,130 +34,88 @@ class Server:
         }
 
     def close(self) -> None:
-        """
-        does everything required to properly close the connection of the server instance
-        :return: None
-        """
         self.socket.close()
 
+    async def response_as_int(self, connection: socket.socket, length=utils.Protocol.buffer_size, endian="big", signed=False) -> int:
+        b = await self.loop.sock_recv(connection, length)
+        return int.from_bytes(b, endian, signed=signed)
+
+    async def send_int_as_bytes(self, connection: socket.socket, integer: int, length=utils.Protocol.buffer_size, endian="big", signed=False) -> None:
+        await self.loop.sock_sendall(connection, integer.to_bytes(length, endian, signed=signed))
+
     async def assert_response_status(self, connection: socket.socket, status: Union[int, bytes]) -> None:
-        response = await self.loop.sock_recv(connection, utils.Protocol.buffer_size)
+        response = await self.response_as_int(connection)
         if response != status:
             raise AssertionError(f"expected status: {status}, got: {response} instead.")
 
-    async def download(self, connection: socket.socket, size: int) -> bytes:
-        """
-        downloads a byte blob from connection in chunks of utils.Protocol.buffer_size
+    async def send_size(self, connection: socket.socket, size: int, endian="big", signed=False) -> None:
+        bites = ceil(size.bit_length() / 8)
+        await self.send_int_as_bytes(connection, bites)
+        await self.assert_response_status(connection, utils.Protocol.success)
 
-        :param connection: connection to the client sending the blob
-        :param size: size of the blob in bytes
-        :return: blob
-        """
+        await self.loop.sock_sendall(connection, size.to_bytes(bites, endian, signed=signed))
+        await self.assert_response_status(connection, utils.Protocol.success)
+
+    async def download(self, connection: socket.socket) -> bytes:
+        bites = await self.response_as_int(connection)
+        await self.send_int_as_bytes(connection, utils.Protocol.success)
+
+        size = await self.response_as_int(connection, bites)
+        await self.send_int_as_bytes(connection, utils.Protocol.success)
+
         blob = b""
-        for _ in range(ceil(size / utils.Protocol.buffer_size)):
-            blob += await self.loop.sock_recv(connection, utils.Protocol.buffer_size)
-        await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
+        for _ in range(int(size / utils.Protocol.max_buffer)):
+            print(f"iteration{_}")
+            blob += await self.loop.sock_recv(connection, utils.Protocol.max_buffer)
+        blob += await self.loop.sock_recv(connection, (size % utils.Protocol.max_buffer))
+
         return blob
 
-    async def handle_stdout(self, connection: socket.socket, stdout: bytes) -> None:
-        await self.loop.sock_sendall(
-            connection,
-            f"{utils.Protocol.Instructions.text}:{len(stdout)}".encode("utf-8")
-        )
-        await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
-        await self.loop.sock_sendall(connection, stdout)
-        await self.assert_response_status(connection, utils.Protocol.StatusCodes.success)
-        await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.advance)
+    async def upload(self, connection: socket.socket, payload: bytes) -> None:
+        await self.send_size(connection, len(payload))
+        await self.assert_response_status(connection, utils.Protocol.success)
 
-    @utils.cast_to_annotations
-    async def handle_file(self, connection: socket.socket, language: str, size: int) -> None:
-        """
-        downloads a file from the client, executes it and sends the result back to the client
+        await self.loop.sock_sendall(connection, payload)
+        await self.assert_response_status(connection, utils.Protocol.success)
 
-        the file is deleted after execution
-
-        :param connection: connection to the client
-        :param language: the source language (supported languages in languages.Languages)
-        :param size: size of the downloaded file
-        :return: None
-        """
+    async def handle_file(self, connection: socket.socket) -> None:
+        language = (await self.download(connection)).decode("utf-8")
         if language in self.languages:
-            await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
+            await self.send_int_as_bytes(connection, utils.Protocol.success)
+
+            code = (await self.download(connection))
+            await self.send_int_as_bytes(connection, utils.Protocol.success)
+            await self.assert_response_status(connection, utils.Protocol.awaiting)
+
             with tempfile.TemporaryDirectory() as tempdir:
                 file = Path(tempdir).joinpath(f"script.{language}")
-                content = await self.download(connection, size)
-                await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
                 with open(file, "wb") as script:
-                    script.write(content)
-                try:
-                    stdout = await asyncio.wait_for(self.languages[language](file), 30)
-                except asyncio.TimeoutError:
-                    await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.internal_server_error)
-                    raise Exception("implement custom exception for timout here")
-                await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-                await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
-                await self.handle_stdout(connection, stdout)
-        else:
-            await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
+                    script.write(code)
+                stdout = await asyncio.wait_for(self.languages[language](file), utils.Protocol.timeout)
+            await self.upload(connection, stdout)
+            await self.send_int_as_bytes(connection, utils.Protocol.awaiting)
 
-    @utils.cast_to_annotations
-    async def handle_protocol(self, connection: socket.socket, size: int) -> None:
-        """
-        verifies that the client and server speaks the same protocol
-
-        sends either utils.Protocol.StatusCodes.success
-        or           utils.Protocol.StatusCodes.internal_server_Error
-        depending on if server and client have same protocol
-
-        :param connection: connection to the client
-        :param size: size of the protocol message in bytes
-        :return:
-        """
-        await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-        client_protocol = (await self.download(connection, size)).decode("utf-8")
-        await self.assert_response_status(connection, utils.Protocol.StatusCodes.advance)
-        if client_protocol == utils.Protocol.get_protocol():
-            await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
-        else:
-            await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.internal_server_error)
+    async def authenticate(self, connection: socket.socket) -> None:
+        protocol = await self.download(connection)
+        if protocol == utils.Protocol.get_protocol().encode("utf-8"):
+            await self.send_int_as_bytes(connection, utils.Protocol.success)
 
     async def handle_connection(self, connection: socket.socket) -> None:
-        """
-        connection loop. connection tries to last for as long the loop is going.
-
-        server expects an instruction from the client that is then launched by matching the received instruction to
-        method in self.instructions.
-
-        loop stops when clients sends status 600 when it is expecting an instruction
-        :return: None
-        """
-        while (response := (await self.loop.sock_recv(connection, utils.Protocol.buffer_size))) != utils.Protocol.StatusCodes.close:
-            instruction, *args = response.decode("utf-8").split(":")
-            if instruction not in self.instructions:
-                await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.not_implemented)
-                raise AssertionError(f"instruction {instruction}, is not implemented in server")
-            try:
-                await self.instructions[instruction](connection, *args)
-            except BrokenPipeError as e:
-                connection.close()
-                raise e
-            except Exception as e:
-                await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.internal_server_error)
-                connection.close()
-                raise e
+        while (response := await self.response_as_int(connection)) != utils.Protocol.close:
+            if response in self.instructions:
+                await self.send_int_as_bytes(connection, utils.Protocol.success)
+                await self.instructions[response](connection)
         else:
-            await self.loop.sock_sendall(connection, utils.Protocol.StatusCodes.success)
+            await self.send_int_as_bytes(connection, utils.Protocol.success)
+
         connection.close()
 
     async def run(self) -> None:
         try:
             while True:
-                connection, *_ = await self.loop.sock_accept(self.socket)
+                connection, _ = await self.loop.sock_accept(self.socket)
                 asyncio.create_task(self.handle_connection(connection))
         except KeyboardInterrupt:
             pass
-        except Exception as e:
-            raise e
         finally:
             self.close()
-

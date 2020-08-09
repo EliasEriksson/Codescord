@@ -26,20 +26,19 @@ def cast_to_annotations(func):
 
 
 class Protocol:
-    buffer_size = 128
+    buffer_size = 1
+    max_buffer = 128
+    timeout = 30
 
-    class Instructions:
-        protocol = "protocol"
-        file = "file"
-        text = "text"
+    success = 0
+    awaiting = 1
+    internal_server_error = 2
+    not_implemented = 3
+    close = 4
 
-    class StatusCodes:
-        advance = b"100"
-        success = b"200"
-        failed = b"400"
-        internal_server_error = b"500"
-        not_implemented = b"501"
-        close = b"600"
+    file = 10
+    authenticate = 11
+    text = 12
 
     @classmethod
     def get_protocol(cls) -> str:
@@ -58,7 +57,7 @@ class Protocol:
         return ":".join(attrs)
 
 
-__all__ = ["Protocol", "cast_to_annotations"]
+__all__ = ["Protocol", "cast_to_annotations", "Protocol"]
 
 
 if __name__ == '__main__':
