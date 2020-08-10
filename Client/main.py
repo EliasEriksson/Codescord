@@ -22,16 +22,12 @@ def run() -> None:
     client = Codescord.client.Client(loop)
 
     result = loop.run_until_complete(
-        client.run(py_source)
+        client.process(py_source)
     )
     print(result)
 
-    # result = loop.run_until_complete(
-    #     client.run(py_source)
-    # )
-
     result = loop.run_until_complete(
-        client.run(cpp_source)
+        client.process(cpp_source)
     )
     print(result)
 

@@ -64,7 +64,7 @@ class Server:
         await self.send_int_as_bytes(connection, bites)
         await self.assert_response_status(connection, utils.Protocol.success)
 
-        await self.loop.sock_sendall(connection, size.to_bytes(bites, endian, signed=signed))
+        await self.send_int_as_bytes(connection, size, bites, endian, signed)
         await self.assert_response_status(connection, utils.Protocol.success)
         print("size sent.")
 
@@ -126,6 +126,7 @@ class Server:
         while (response := await self.response_as_int(connection)) != utils.Protocol.close:
             if response in self.instructions:
                 await self.send_int_as_bytes(connection, utils.Protocol.success)
+                # noinspection PyArgumentList
                 await self.instructions[response](connection)
         else:
             await self.send_int_as_bytes(connection, utils.Protocol.success)

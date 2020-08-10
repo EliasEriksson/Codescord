@@ -52,7 +52,7 @@ class Client:
         print("sending size...")
         # number of bytes required to store the size in an int
         bites = ceil(size.bit_length() / 8)
-        await self.send_int_as_bytes(bites)
+        await self.send_int_as_bytes(bites, endian=endian, signed=signed)
         await self.assert_response_status(utils.Protocol.success)
 
         await self.send_int_as_bytes(size, bites)
@@ -132,7 +132,7 @@ class Client:
         print("connection handled.")
         return stdout
 
-    async def run(self, source: Source) -> str:
+    async def process(self, source: Source) -> str:
         print("connecting...")
         try:
             stdout = await self.handle_connection(source)

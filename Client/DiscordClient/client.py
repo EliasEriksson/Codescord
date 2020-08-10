@@ -20,7 +20,7 @@ class Client(discord.Client):
         if message.author != self.user:
             if match := self.code_pattern.search(message.content):
                 source = Codescord.Source(*match.groups())
-                stdout = await self.codescord_client.run(source)
+                stdout = await self.codescord_client.process(source)
                 await message.channel.send(
                     f"```{stdout}```"
                 )
