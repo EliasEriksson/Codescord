@@ -30,15 +30,17 @@ class Protocol:
     max_buffer = 128
     timeout = 30
 
-    success = 0
-    awaiting = 1
-    internal_server_error = 2
-    not_implemented = 3
-    close = 4
+    class Status:
+        success = 0
+        awaiting = 1
 
-    file = 10
-    authenticate = 11
-    text = 12
+        internal_server_error = 10
+        not_implemented = 11
+        close = 12
+
+        file = 20
+        authenticate = 21
+        text = 22
 
     @classmethod
     def get_protocol(cls) -> str:
@@ -57,7 +59,7 @@ class Protocol:
         return ":".join(attrs)
 
 
-__all__ = ["Protocol", "cast_to_annotations", "Protocol"]
+__all__ = ["cast_to_annotations", "Protocol"]
 
 
 if __name__ == '__main__':

@@ -123,16 +123,20 @@ class Server:
 
     async def handle_connection(self, connection: socket.socket) -> None:
         print("handling the connection...")
-        while (response := await self.response_as_int(connection)) != utils.Protocol.close:
-            if response in self.instructions:
-                await self.send_int_as_bytes(connection, utils.Protocol.success)
-                # noinspection PyArgumentList
-                await self.instructions[response](connection)
-        else:
+        try:
+            while (response := await self.response_as_int(connection)) != utils.Protocol.close:
+                if response in self.instructions:
+                    await self.send_int_as_bytes(connection, utils.Protocol.success)
+                    # noinspection PyArgumentList
+                    await self.instructions[response](connection)
+                else:
+                    await self.send_int_as_bytes(connection, utils.Protocol.not_implemented)
             await self.send_int_as_bytes(connection, utils.Protocol.success)
             print("connection handled.")
-
-        connection.close()
+        except BrokenPipeError:
+            print("Client disconnected.")
+        finally:
+            connection.close()
 
     async def run(self) -> None:
         print("awaiting connections...")

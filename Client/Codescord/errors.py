@@ -1,10 +1,18 @@
-class DisconnectedFromServer(Exception):
-    pass
-
-
-class ConnectionLostFromServer(Exception):
-    pass
-
-
 class ProcessTimedOut(Exception):
+    pass
+
+
+class NotImplementedByServer(Exception):
+    pass
+
+
+class NotImplementedByClient(Exception):
+    pass
+
+
+class InternalServerError(Exception):
+    pass
+
+
+class MaximumRetries(Exception):
     pass

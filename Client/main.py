@@ -26,11 +26,6 @@ def run() -> None:
     )
     print(result)
 
-    result = loop.run_until_complete(
-        client.process(cpp_source)
-    )
-    print(result)
-
 
 def run_as_discord():
     token = os.environ.get("DISCORD_DEV")

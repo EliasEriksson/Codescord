@@ -3,6 +3,7 @@ import socket
 import asyncio
 from math import ceil
 import utils
+from .errors import *
 
 
 def setup_socket() -> socket.socket:
@@ -22,6 +23,7 @@ class Client:
         print("initializing...")
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
+        self.retries = 3
         print("initialized.")
 
     def close(self) -> None:
@@ -41,33 +43,42 @@ class Client:
         await self.loop.sock_sendall(self.socket, integer.to_bytes(length, endian, signed=signed))
         print(f"sent int ({integer}) as bytes.")
 
-    async def assert_response_status(self, status: Union[int, bytes]) -> None:
+    async def assert_response_status(self, status=utils.Protocol.Status.success) -> None:
         print(f"asserting response status ({status})...")
         response = await self.response_as_int()
-        if response != status:
-            raise AssertionError(f"expected status: {status}, got: {response} instead.")
-        print(f"response passed assertion ({status}).")
+        if response == status:
+            print(f"response passed assertion ({status}).")
+        elif response == utils.Protocol.Status.not_implemented:
+            print(f"response was `{response}` (not implemented) expected `{status}`.")
+            raise NotImplementedByServer()
+        elif response == utils.Protocol.Status.internal_server_error:
+            print(f"response was `{response}` (internal server error) expected `{status}`.")
+            raise InternalServerError()
+        elif response not in [getattr(utils.Protocol, attr) for attr in dir(utils.Protocol.Status)]:
+            print(f"response `{response}` does not exist in Protocol.")
+            raise NotImplementedByClient(f"Could not find status {response} in Protocol.")
+        raise AssertionError(f"expected status: {status}, got: {response} instead.")
 
     async def send_size(self, size: int, endian="big", signed=False) -> None:
         print("sending size...")
         # number of bytes required to store the size in an int
         bites = ceil(size.bit_length() / 8)
         await self.send_int_as_bytes(bites, endian=endian, signed=signed)
-        await self.assert_response_status(utils.Protocol.success)
+        await self.assert_response_status(utils.Protocol.Status.success)
 
         await self.send_int_as_bytes(size, bites)
-        await self.assert_response_status(utils.Protocol.success)
+        await self.assert_response_status(utils.Protocol.Status.success)
         print("sent size.")
 
     async def download(self) -> bytes:
         print("downloading...")
         # number of bytes required to store the size of the blob in an int
         bites = await self.response_as_int()
-        await self.send_int_as_bytes(utils.Protocol.success)
+        await self.send_int_as_bytes(utils.Protocol.Status.success)
 
         # size of the blob in number of bytes
         size = await self.response_as_int(bites)
-        await self.send_int_as_bytes(utils.Protocol.success)
+        await self.send_int_as_bytes(utils.Protocol.Status.success)
 
         # initialising blob and downloading from socket, blob will be `size` bytes
         blob = b""
@@ -82,22 +93,29 @@ class Client:
         await self.send_size(len(payload))
 
         await self.loop.sock_sendall(self.socket, payload)
-        await self.assert_response_status(utils.Protocol.success)
+        await self.assert_response_status(utils.Protocol.Status.success)
         print("uploaded.")
 
-    async def authenticate(self) -> None:
+    async def authenticate(self, attempts=0) -> None:
         print("authenticating...")
-        await self.send_int_as_bytes(utils.Protocol.authenticate)
-        await self.assert_response_status(utils.Protocol.success)
+        try:
+            await self.send_int_as_bytes(utils.Protocol.Status.authenticate)
+            await self.assert_response_status(utils.Protocol.Status.success, )
 
-        payload = utils.Protocol.get_protocol().encode("utf-8")
-        await self.upload(payload)
-        print("authenticated.")
+            payload = utils.Protocol.get_protocol().encode("utf-8")
+            await self.upload(payload)
+            print("authenticated.")
+        except InternalServerError:
+            if attempts < self.retries:
+                await self.authenticate(attempts + 1)
+            else:
+                print("authentication reached maximum number of retries.")
+                raise MaximumRetries()
 
     async def handle_source(self, source: Source) -> None:
         print("handling the source...")
-        await self.send_int_as_bytes(utils.Protocol.file)
-        await self.assert_response_status(utils.Protocol.success)
+        await self.send_int_as_bytes(utils.Protocol.Status.file)
+        await self.assert_response_status(utils.Protocol.Status.success)
 
         payload = source.language.encode("utf-8")
         await self.upload(payload)
@@ -109,36 +127,49 @@ class Client:
     async def handle_stdout(self) -> Optional[str]:
         print("handling stdout...")
         response = await self.response_as_int()
-        if response == utils.Protocol.text:
-            await self.send_int_as_bytes(utils.Protocol.success)
+        if response == utils.Protocol.Status.text:
+            await self.send_int_as_bytes(utils.Protocol.Status.success)
             blob = await self.download()
-            await self.send_int_as_bytes(utils.Protocol.success)
+            await self.send_int_as_bytes(utils.Protocol.Status.success)
             print("stdout handled.")
             return blob.decode("utf-8")
 
     async def handle_connection(self, source: Source) -> str:
         print("handling the connection...")
-        await self.loop.sock_connect(self.socket, ("localhost", 6969))
-        await self.authenticate()
-        await self.handle_source(source)
+        try:
+            await self.authenticate()
+            await self.handle_source(source)
 
-        await self.send_int_as_bytes(utils.Protocol.awaiting)
-        stdout = await self.handle_stdout()
-        await self.loop.sock_recv(self.socket, utils.Protocol.awaiting)
+            await self.send_int_as_bytes(utils.Protocol.Status.awaiting)
+            stdout = await self.handle_stdout()
+            await self.loop.sock_recv(self.socket, utils.Protocol.Status.awaiting)
 
-        await self.send_int_as_bytes(utils.Protocol.close)
-        await self.response_as_int(utils.Protocol.success)
+            await self.send_int_as_bytes(utils.Protocol.Status.close)
+            await self.response_as_int(utils.Protocol.Status.success)
 
-        print("connection handled.")
-        return stdout
+            print("connection handled.")
+            return stdout
+        except (NotImplementedByServer, NotImplementedByClient):
+            return f"Server/Client Protocol is out of sync please contact developer for update."
+        except MaximumRetries:
+            pass
 
-    async def process(self, source: Source) -> str:
+    async def process(self, source: Source, attempts=0) -> str:
         print("connecting...")
         try:
+            await self.loop.sock_connect(self.socket, ("localhost", 6969))
             stdout = await self.handle_connection(source)
+            return stdout if stdout else "There was an error processing the source."
         except KeyboardInterrupt:
-            stdout = None
+            pass
+        except ConnectionError as e:
+            if attempts < self.retries:
+                print(e)
+                print(f"connection was refused retrying with attempts number {attempts}.")
+                await asyncio.sleep(1)
+                return await self.process(source, attempts + 1)
+            return f"Processing server down. Please try again later."
         finally:
+            # this runs 3 times in a row if full connectionError is happening
             self.close()
-        print("disconnected.")
-        return stdout if stdout else "There was an error processing the source."
+            print("disconnected.")
