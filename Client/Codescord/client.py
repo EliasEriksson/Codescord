@@ -1,4 +1,3 @@
-from typing import *
 import socket
 import asyncio
 from math import ceil
@@ -44,14 +43,16 @@ class Client:
         """
         receive an integer from the server.
 
-        most integers will be 1 byte big (status codes) but occasionally larger (reception size).
         mostly a convenience method to automatically convert received bytes to int.
-        used for status codes and reception size (number of bytes).
+        OBS! integer can not be larger than 1 byte.
+        if necessary this can be changed by using the first section of the upload code
 
         :param length: buffer size.
         :param endian: big or little endian int.
         :param signed: singed or unsigned int
         :param connection: connection to the processing server
+
+        :raises ConnectionError: if anything goes wrong with the connection (DCs etc).
 
         :return: None
         """
@@ -61,6 +62,17 @@ class Client:
         return integer
 
     async def send_int_as_bytes(self, connection: socket.socket, integer: int, length=utils.Protocol.buffer_size, endian="big", signed=False) -> None:
+        """
+        sends an integer to the recipient
+        OBS! only 1 byte int supported
+
+        :param connection: connection to the recipient.
+        :param integer: integer to be sent.
+        :param length: number of bytes (currently must be 1).
+        :param endian: endianness.
+        :param signed: signed or unsigned integer.
+        :return: None
+        """
         print(f"sending int ({integer}) as bytes...")
         await self.loop.sock_sendall(connection, integer.to_bytes(length, endian, signed=signed))
         print(f"sent int ({integer}) as bytes.")
@@ -174,8 +186,8 @@ class Client:
         :param connection: the connection to the processing server
 
         :raises NotImplementedByServer: if the instruction is not implemented by the server.
-        :raises ConnectionError: if any sort of connection error occurs.
         :raises InternalServerError: if the server can communicate but something goes wrong on the other side.
+        :raises ConnectionError: if any sort of connection error occurs.
 
         :return: None
         """
@@ -195,9 +207,10 @@ class Client:
 
         if anything goes wrong InternalServerError is raised
 
-        :raises: InternalServerError,
+        :raises InternalServerError: if the server can communicate but something goes wrong on the other side.
+        :raises ConnectionError: if any sort of connection error occurs.
 
-        :param connection:
+        :param connection: the connection to the processing server.
         :param source: source object with language and source code
         :return: None
         """
@@ -232,21 +245,25 @@ class Client:
             await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             print("stdout handled.")
             return blob.decode("utf-8")
-        await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
-        raise NotImplementedByClient(f"handle_stdout cant handle {response}")
+        else:
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
+            raise NotImplementedByClient(f"handle_stdout cant handle {response}")
 
     async def handle_connection(self, connection: socket.socket, source: Source) -> str:
         """
-        the main procedure of the processing of the source
+        the main procedure of the processing of the source.
 
         makes sure the client and server authenticates before proceeding.
         sends the source to the processing server.
         waits for the processing server to send results back, times out after 30 seconds.
         downloads the results and returns them.
 
-        :param connection: the connection to the processing server
-        :param source:
-        :return:
+        :param connection: the connection to the processing server.
+        :param source: source object with language and source code.
+
+        :raises ConnectionError: if any sort of connection error occurs.
+
+        :return: None
         """
         print("handling the connection...")
         try:
@@ -292,7 +309,7 @@ class Client:
             if attempts < self.retries:
                 print(e)
                 print(f"connection was refused retrying with attempts number {attempts}.")
-                await asyncio.sleep(1)
+                await asyncio.sleep(3)
                 return await self.process(source, attempts + 1, False)
             return f"Processing server down. Please try again later."
         finally:

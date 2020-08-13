@@ -1,4 +1,3 @@
-from typing import *
 import socket
 import asyncio
 import tempfile
@@ -6,6 +5,7 @@ from pathlib import Path
 from math import ceil
 import utils
 from .languages import Languages
+from .errors import *
 
 
 def setup_socket() -> socket.socket:
@@ -19,6 +19,14 @@ def setup_socket() -> socket.socket:
 
 class Server:
     def __init__(self, loop=None) -> None:
+        """
+        :attr socket: the socket dealing with incoming connections.
+        :attr loop: the event loop.
+        :attr instructions: supported instructions that can be launched from the main processing loop in handle_connection.
+        :attr languages: languages that can be processed.
+
+        :param loop: the event loop
+        """
         print("initializing...")
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
@@ -35,11 +43,6 @@ class Server:
         }
         print("initialized.")
 
-    def close(self) -> None:
-        print("closing...")
-        self.socket.close()
-        print("closed.")
-
     async def response_as_int(self, connection: socket.socket, length=utils.Protocol.buffer_size, endian="big", signed=False) -> int:
         print(f"awaiting response as int...")
         integer = int.from_bytes((await self.loop.sock_recv(connection, length)), endian, signed=signed)
@@ -54,19 +57,19 @@ class Server:
     async def assert_response_status(self, connection: socket.socket, status: int) -> None:
         print(f"asserting response status ({status})...")
         response = await self.response_as_int(connection)
-        if response != status:
+        if response == status:
+            print(f"response passed assertion ({status}).")
+        elif response == utils.Protocol.Status.not_implemented:
+            print(f"response was `{response}` (not implemented) expected `{status}`.")
+            raise NotImplementedByClient()
+        elif response == utils.Protocol.Status.internal_server_error:
+            print(f"response was `{response}` (internal server error) expected `{status}`.")
+            raise InternalServerError()
+        elif response not in [getattr(utils.Protocol, attr) for attr in dir(utils.Protocol.Status)]:
+            print(f"response `{response}` does not exist in Protocol.")
+            raise NotImplementedByServer(f"Could not find status {response} in Protocol.")
+        else:
             raise AssertionError(f"expected status: {status}, got: {response} instead.")
-        print(f"response passed assertion ({status}).")
-
-    async def send_size(self, connection: socket.socket, size: int, endian="big", signed=False) -> None:
-        print("sending size...")
-        bites = ceil(size.bit_length() / 8)
-        await self.send_int_as_bytes(connection, bites)
-        await self.assert_response_status(connection, utils.Protocol.Status.success)
-
-        await self.send_int_as_bytes(connection, size, bites, endian, signed)
-        await self.assert_response_status(connection, utils.Protocol.Status.success)
-        print("size sent.")
 
     async def download(self, connection: socket.socket) -> bytes:
         print("downloading...")
@@ -86,11 +89,21 @@ class Server:
 
     async def upload(self, connection: socket.socket, payload: bytes) -> None:
         print("uploading...")
-        await self.send_size(connection, len(payload))
+
+        size = len(payload)
+
+        bites = ceil(size.bit_length() / 8)
+        await self.send_int_as_bytes(connection, bites)
+        await self.assert_response_status(connection, utils.Protocol.Status.success)
+
+        await self.send_int_as_bytes(connection, size, bites)
+        await self.assert_response_status(connection, utils.Protocol.Status.success)
 
         await self.loop.sock_sendall(connection, payload)
         await self.assert_response_status(connection, utils.Protocol.Status.success)
         print("uploaded.")
+
+    # methods above are generic/shared with client and should be put in a parent class
 
     async def handle_file(self, connection: socket.socket) -> None:
         print("handling file...")
@@ -113,6 +126,9 @@ class Server:
             await self.upload(connection, stdout)
             await self.send_int_as_bytes(connection, utils.Protocol.Status.awaiting)
             print("file handled.")
+        else:
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
+            raise NotImplementedByServer()
 
     async def authenticate(self, connection: socket.socket) -> None:
         print("authenticating...")
@@ -120,25 +136,49 @@ class Server:
         if protocol == utils.Protocol.get_protocol().encode("utf-8"):
             await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             print("authenticated.")
+        else:
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
+            raise NotImplementedByServer()
 
     async def handle_connection(self, connection: socket.socket) -> None:
+        """
+        the main procedure of processing a connection.
+
+        waits for an instruction, if the instruction is listed in instructions sends success back
+        ands launches the instruction.
+        if the instruction is not listed sends not implemented by server status back to the client.
+
+        :param connection: the connection to the client.
+        :return: None
+        """
         print("handling the connection...")
         try:
             while (response := await self.response_as_int(connection)) != utils.Protocol.Status.close:
                 if response in self.instructions:
                     await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
-                    # noinspection PyArgumentList
-                    await self.instructions[response](connection)
+                    try:
+                        # noinspection PyArgumentList
+                        await self.instructions[response](connection)
+                    except Exception as e:
+                        await self.send_int_as_bytes(connection, utils.Protocol.Status.internal_server_error)
+                        raise e
                 else:
                     await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
             await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             print("connection handled.")
-        except BrokenPipeError:
+        except ConnectionError:
             print("Client disconnected.")
         finally:
             connection.close()
 
     async def run(self) -> None:
+        """
+        starts the server
+
+        awaits connections and creates a new task to handle the connection
+
+        :return: None
+        """
         print("awaiting connections...")
         try:
             while True:
@@ -147,4 +187,4 @@ class Server:
         except KeyboardInterrupt:
             pass
         finally:
-            self.close()
+            self.socket.close()
