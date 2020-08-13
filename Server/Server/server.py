@@ -23,8 +23,8 @@ class Server:
         self.socket = setup_socket()
         self.loop = loop if loop else asyncio.get_event_loop()
         self.instructions = {
-            utils.Protocol.authenticate: self.authenticate,
-            utils.Protocol.file: self.handle_file,
+            utils.Protocol.Status.authenticate: self.authenticate,
+            utils.Protocol.Status.file: self.handle_file,
         }
         self.languages = {
             "python": Languages.python,
@@ -62,19 +62,19 @@ class Server:
         print("sending size...")
         bites = ceil(size.bit_length() / 8)
         await self.send_int_as_bytes(connection, bites)
-        await self.assert_response_status(connection, utils.Protocol.success)
+        await self.assert_response_status(connection, utils.Protocol.Status.success)
 
         await self.send_int_as_bytes(connection, size, bites, endian, signed)
-        await self.assert_response_status(connection, utils.Protocol.success)
+        await self.assert_response_status(connection, utils.Protocol.Status.success)
         print("size sent.")
 
     async def download(self, connection: socket.socket) -> bytes:
         print("downloading...")
         bites = await self.response_as_int(connection)
-        await self.send_int_as_bytes(connection, utils.Protocol.success)
+        await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
 
         size = await self.response_as_int(connection, bites)
-        await self.send_int_as_bytes(connection, utils.Protocol.success)
+        await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
 
         blob = b""
         for _ in range(int(size / utils.Protocol.max_buffer)):
@@ -89,17 +89,17 @@ class Server:
         await self.send_size(connection, len(payload))
 
         await self.loop.sock_sendall(connection, payload)
-        await self.assert_response_status(connection, utils.Protocol.success)
+        await self.assert_response_status(connection, utils.Protocol.Status.success)
         print("uploaded.")
 
     async def handle_file(self, connection: socket.socket) -> None:
         print("handling file...")
         language = (await self.download(connection)).decode("utf-8")
         if language in self.languages:
-            await self.send_int_as_bytes(connection, utils.Protocol.success)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             code = await self.download(connection)
-            await self.send_int_as_bytes(connection, utils.Protocol.success)
-            await self.assert_response_status(connection, utils.Protocol.awaiting)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
+            await self.assert_response_status(connection, utils.Protocol.Status.awaiting)
 
             with tempfile.TemporaryDirectory() as tempdir:
                 file = Path(tempdir).joinpath(f"script.{language}")
@@ -107,31 +107,31 @@ class Server:
                     script.write(code)
                 stdout = await asyncio.wait_for(self.languages[language](file), utils.Protocol.timeout)
 
-            await self.send_int_as_bytes(connection, utils.Protocol.text)
-            await self.assert_response_status(connection, utils.Protocol.success)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.text)
+            await self.assert_response_status(connection, utils.Protocol.Status.success)
 
             await self.upload(connection, stdout)
-            await self.send_int_as_bytes(connection, utils.Protocol.awaiting)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.awaiting)
             print("file handled.")
 
     async def authenticate(self, connection: socket.socket) -> None:
         print("authenticating...")
         protocol = await self.download(connection)
         if protocol == utils.Protocol.get_protocol().encode("utf-8"):
-            await self.send_int_as_bytes(connection, utils.Protocol.success)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             print("authenticated.")
 
     async def handle_connection(self, connection: socket.socket) -> None:
         print("handling the connection...")
         try:
-            while (response := await self.response_as_int(connection)) != utils.Protocol.close:
+            while (response := await self.response_as_int(connection)) != utils.Protocol.Status.close:
                 if response in self.instructions:
-                    await self.send_int_as_bytes(connection, utils.Protocol.success)
+                    await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
                     # noinspection PyArgumentList
                     await self.instructions[response](connection)
                 else:
-                    await self.send_int_as_bytes(connection, utils.Protocol.not_implemented)
-            await self.send_int_as_bytes(connection, utils.Protocol.success)
+                    await self.send_int_as_bytes(connection, utils.Protocol.Status.not_implemented)
+            await self.send_int_as_bytes(connection, utils.Protocol.Status.success)
             print("connection handled.")
         except BrokenPipeError:
             print("Client disconnected.")

@@ -33,9 +33,9 @@ class Client:
         print("closed.")
 
     async def response_as_int(self, length=utils.Protocol.buffer_size, endian="big", signed=False) -> int:
-        print("awaiting response as int...")
+        print("SLEEPING")
         integer = int.from_bytes((await self.loop.sock_recv(self.socket, length)), endian, signed=signed)
-        print(f"got response as int ({integer}).")
+        print(f"\tgot response as int ({integer}).")
         return integer
 
     async def send_int_as_bytes(self, integer: int, length=utils.Protocol.buffer_size, endian="big", signed=False) -> None:
@@ -44,20 +44,21 @@ class Client:
         print(f"sent int ({integer}) as bytes.")
 
     async def assert_response_status(self, status=utils.Protocol.Status.success) -> None:
-        print(f"asserting response status ({status})...")
+        print(f"\tasserting response status ({status})...")
         response = await self.response_as_int()
         if response == status:
-            print(f"response passed assertion ({status}).")
+            print(f"\tresponse passed assertion ({status}).")
         elif response == utils.Protocol.Status.not_implemented:
-            print(f"response was `{response}` (not implemented) expected `{status}`.")
+            print(f"\tresponse was `{response}` (not implemented) expected `{status}`.")
             raise NotImplementedByServer()
         elif response == utils.Protocol.Status.internal_server_error:
-            print(f"response was `{response}` (internal server error) expected `{status}`.")
+            print(f"\tresponse was `{response}` (internal server error) expected `{status}`.")
             raise InternalServerError()
         elif response not in [getattr(utils.Protocol, attr) for attr in dir(utils.Protocol.Status)]:
             print(f"response `{response}` does not exist in Protocol.")
             raise NotImplementedByClient(f"Could not find status {response} in Protocol.")
-        raise AssertionError(f"expected status: {status}, got: {response} instead.")
+        else:
+            raise AssertionError(f"expected status: {status}, got: {response} instead.")
 
     async def send_size(self, size: int, endian="big", signed=False) -> None:
         print("sending size...")
@@ -96,24 +97,18 @@ class Client:
         await self.assert_response_status(utils.Protocol.Status.success)
         print("uploaded.")
 
-    async def authenticate(self, attempts=0) -> None:
+    async def authenticate(self) -> None:
         print("authenticating...")
-        try:
-            await self.send_int_as_bytes(utils.Protocol.Status.authenticate)
-            await self.assert_response_status(utils.Protocol.Status.success, )
+        await self.send_int_as_bytes(utils.Protocol.Status.authenticate)
+        await self.assert_response_status(utils.Protocol.Status.success, )
 
-            payload = utils.Protocol.get_protocol().encode("utf-8")
-            await self.upload(payload)
-            print("authenticated.")
-        except InternalServerError:
-            if attempts < self.retries:
-                await self.authenticate(attempts + 1)
-            else:
-                print("authentication reached maximum number of retries.")
-                raise MaximumRetries()
+        payload = utils.Protocol.get_protocol().encode("utf-8")
+        await self.upload(payload)
+        print("authenticated.")
 
     async def handle_source(self, source: Source) -> None:
         print("handling the source...")
+
         await self.send_int_as_bytes(utils.Protocol.Status.file)
         await self.assert_response_status(utils.Protocol.Status.success)
 
@@ -124,7 +119,7 @@ class Client:
         await self.upload(payload)
         print("source handled.")
 
-    async def handle_stdout(self) -> Optional[str]:
+    async def handle_stdout(self) -> str:
         print("handling stdout...")
         response = await self.response_as_int()
         if response == utils.Protocol.Status.text:
@@ -133,6 +128,7 @@ class Client:
             await self.send_int_as_bytes(utils.Protocol.Status.success)
             print("stdout handled.")
             return blob.decode("utf-8")
+        raise NotImplementedByClient(f"handle_stdout cant handle {response}")
 
     async def handle_connection(self, source: Source) -> str:
         print("handling the connection...")
@@ -142,20 +138,31 @@ class Client:
 
             await self.send_int_as_bytes(utils.Protocol.Status.awaiting)
             stdout = await self.handle_stdout()
-            await self.loop.sock_recv(self.socket, utils.Protocol.Status.awaiting)
+            await self.assert_response_status(utils.Protocol.Status.awaiting)
 
+            print("client starting to send close")
             await self.send_int_as_bytes(utils.Protocol.Status.close)
-            await self.response_as_int(utils.Protocol.Status.success)
+            await self.assert_response_status(utils.Protocol.Status.success)
 
             print("connection handled.")
             return stdout
+        except InternalServerError:
+            return f"something went wrong internally on the server, please contact developer for update."
         except (NotImplementedByServer, NotImplementedByClient):
-            return f"Server/Client Protocol is out of sync please contact developer for update."
-        except MaximumRetries:
-            pass
+            return f"client protocol out of sync with server, please contact developer for update."
 
-    async def process(self, source: Source, attempts=0) -> str:
-        print("connecting...")
+    async def process(self, source: Source, attempts=0, init=True) -> str:
+        """
+        processes a source object on the processing server
+
+        starts the process of sending over the source object to the server to process
+        and receiving the result back from stdout
+
+        :param source: source object with language and source code
+        :param attempts: how many attempts of reconnecting that have been done (max limit in self.retries)
+        :param init: if initial call, makes sure it doesnt spam self.close() if all connection tries fails
+        :return:
+        """
         try:
             await self.loop.sock_connect(self.socket, ("localhost", 6969))
             stdout = await self.handle_connection(source)
@@ -167,9 +174,10 @@ class Client:
                 print(e)
                 print(f"connection was refused retrying with attempts number {attempts}.")
                 await asyncio.sleep(1)
-                return await self.process(source, attempts + 1)
+                return await self.process(source, attempts + 1, False)
             return f"Processing server down. Please try again later."
         finally:
             # this runs 3 times in a row if full connectionError is happening
-            self.close()
-            print("disconnected.")
+            if init:
+                self.close()
+                print("disconnected.")

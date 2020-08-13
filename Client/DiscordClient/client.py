@@ -13,8 +13,10 @@ class Client(discord.Client):
     async def on_ready():
         print("bot online")
 
-    async def on_message_edit(self) -> None:
-        pass
+    async def on_message_edit(self, _, after: discord.Message) -> None:
+        channel: discord.TextChannel = after.channel
+        message = channel.fetch_message(0)
+
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author != self.user:
