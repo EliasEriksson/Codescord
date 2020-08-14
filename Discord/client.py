@@ -2,6 +2,11 @@ import discord
 import Codescord
 import re
 
+# model a message table with help of
+# https://github.com/EliasEriksson/ClassicQuestGivers/blob/master/ClassicQuestGivers/ClassicQuestGivers/db.py
+# and https://pypi.org/project/sqlalchemy-aio/
+# id, guild, channel, message (ids)
+
 
 class Client(discord.Client):
     def __init__(self):
