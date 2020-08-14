@@ -83,7 +83,12 @@ class Net:
         elif response == Protocol.Status.internal_server_error:
             print(f"response was `{response}` (internal server error) expected `{status}`.")
             raise Errors.InternalServerError()
-        elif response not in [getattr(Protocol, attr) for attr in dir(Protocol.Status)]:
+        elif response == Protocol.Status.process_timeout:
+            print(f"process took longer than {Protocol.timeout}")
+            raise Errors.ProcessTimedOut()
+        elif response == Protocol.Status.language_not_implemented:
+            raise Errors.LanguageNotImplementedByServer()
+        elif response not in [getattr(Protocol.Status, attr) for attr in dir(Protocol.Status)]:
             print(f"response `{response}` does not exist in Protocol.")
             raise Errors.NotImplementedByClient(f"Could not find status {response} in Protocol.")
         else:

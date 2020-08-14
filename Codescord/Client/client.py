@@ -87,16 +87,14 @@ class Client(Net):
         :return:
         """
         print("handling stdout...")
-        response = await self.response_as_int(connection)
-        if response == Protocol.Status.text:
-            await self.send_int_as_bytes(connection, Protocol.Status.success)
-            blob = await self.download(connection)
-            await self.send_int_as_bytes(connection, Protocol.Status.success)
-            print("stdout handled.")
-            return blob.decode("utf-8")
-        else:
-            await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
-            raise Errors.NotImplementedByClient(f"handle_stdout cant handle {response}")
+        await self.assert_response_status(connection, Protocol.Status.text)
+        await self.send_int_as_bytes(connection, Protocol.Status.success)
+
+        blob = await self.download(connection)
+        await self.send_int_as_bytes(connection, Protocol.Status.success)
+
+        print("stdout handled.")
+        return blob.decode("utf-8")
 
     async def handle_connection(self, connection: socket.socket, source: Source) -> str:
         """
@@ -131,8 +129,16 @@ class Client(Net):
             return stdout
         except Errors.InternalServerError:
             return f"something went wrong internally on the server, please contact developer for update."
+        except Errors.LanguageNotImplementedByServer:
+            print(f"language {source.language} is not implemented by the server.")
+            return f"language {source.language} is not implemented."
+        except Errors.ProcessTimedOut:
+            print(f"process took to longer than {Protocol.timeout} to finish.")
+            return f"Your file took too long to process, maximum time {Protocol.timeout}s."
         except (Errors.NotImplementedByServer, Errors.NotImplementedByClient):
             return f"client protocol out of sync with server, please contact developer for update."
+        finally:
+            connection.close()
 
     async def process(self, source: Source, attempts=0, init=True) -> str:
         """
@@ -162,6 +168,5 @@ class Client(Net):
                 return await self.process(source, attempts + 1, False)
             return f"Processing server down. Please try again later."
         finally:
-            # this runs 3 times in a row if full connectionError is happening
             if init:
                 connection.close()

@@ -5,6 +5,9 @@ class Errors:
     class NotImplementedByServer(NotImplementedError):
         pass
 
+    class LanguageNotImplementedByServer(NotImplementedByServer):
+        pass
+
     class NotImplementedByClient(NotImplementedError):
         pass
 

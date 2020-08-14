@@ -6,10 +6,12 @@ class Protocol:
     class Status:
         success = 0
         awaiting = 1
+        close = 2
 
         internal_server_error = 10
-        not_implemented = 11
-        close = 12
+        language_not_implemented = 11
+        not_implemented = 12
+        process_timeout = 13
 
         file = 20
         authenticate = 21

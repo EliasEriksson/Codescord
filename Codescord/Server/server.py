@@ -57,13 +57,20 @@ class Server(Net):
             print("authenticated.")
         else:
             await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
-            raise Errors.NotImplementedByServer()
+            raise Errors.NotImplementedByServer("protocol")
 
     async def handle_file(self, connection: socket.socket) -> None:
         """
+        handles the downloading and execution of a source file
 
-        :param connection: the connection to the processing server
-        :return:
+        first downloads the language from the client and sees if its a supported language.
+        if it is the language source is downloaded.
+        the source is then saved to a file in a tempdir and executed with
+        procedures from Codescord.Common.Languages.
+        the standard out is captured and sent back to the client.
+
+        :param connection: the connection to the processing server.
+        :return: None
         """
         print("handling file...")
         language = (await self.download(connection)).decode("utf-8")
@@ -77,8 +84,11 @@ class Server(Net):
                 file = Path(tempdir).joinpath(f"script.{language}")
                 with open(file, "wb") as script:
                     script.write(code)
-                # TODO add timout exception here
-                stdout = await asyncio.wait_for(self.languages[language](file), Protocol.timeout)
+                try:
+                    stdout = await asyncio.wait_for(self.languages[language](file), Protocol.timeout)
+                except asyncio.TimeoutError:
+                    await self.send_int_as_bytes(connection, Protocol.Status.process_timeout)
+                    raise Errors.ProcessTimedOut(f"process took longer than {Protocol.timeout}")
 
             await self.send_int_as_bytes(connection, Protocol.Status.text)
             await self.assert_response_status(connection, Protocol.Status.success)
@@ -88,7 +98,7 @@ class Server(Net):
             print("file handled.")
         else:
             await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
-            raise Errors.NotImplementedByServer()
+            raise Errors.LanguageNotImplementedByServer(language)
 
     async def handle_connection(self, connection: socket.socket) -> None:
         """
@@ -106,18 +116,21 @@ class Server(Net):
             while (response := await self.response_as_int(connection)) != Protocol.Status.close:
                 if response in self.instructions:
                     await self.send_int_as_bytes(connection, Protocol.Status.success)
-                    try:
-                        # noinspection PyArgumentList
-                        await self.instructions[response](connection)
-                    except Exception as e:
-                        await self.send_int_as_bytes(connection, Protocol.Status.internal_server_error)
-                        raise e
+                    # noinspection PyArgumentList
+                    await self.instructions[response](connection)
                 else:
                     await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
             await self.send_int_as_bytes(connection, Protocol.Status.success)
             print("connection handled.")
-        except ConnectionError:
-            print("Client disconnected.")
+        except Errors.ProcessTimedOut as e:
+            print(e)
+        except Errors.LanguageNotImplementedByServer as e:
+            print(f"language {e} is not implemented by the server.")
+        except Errors.NotImplementedByServer as e:
+            print(f"{e} is not implemented by the server.")
+        except Exception as e:
+            await self.send_int_as_bytes(connection, Protocol.Status.internal_server_error)
+            raise e
         finally:
             connection.close()
 
@@ -134,6 +147,8 @@ class Server(Net):
             while True:
                 connection, _ = await self.loop.sock_accept(self.socket)
                 asyncio.create_task(self.handle_connection(connection))
+        except ConnectionError:
+            print("Client disconnected.")
         except KeyboardInterrupt:
             pass
         finally:
