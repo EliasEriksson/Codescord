@@ -6,7 +6,7 @@ import re
 class Client(discord.Client):
     def __init__(self):
         super(Client, self).__init__()
-        self.codescord_client = Codescord.client.Client(self.loop)
+        self.codescord_client = Codescord.Client(self.loop)
         self.code_pattern = re.compile(r"```(\w+)\n([^=`]+)```", re.DOTALL)
 
     @staticmethod
@@ -16,7 +16,6 @@ class Client(discord.Client):
     async def on_message_edit(self, _, after: discord.Message) -> None:
         channel: discord.TextChannel = after.channel
         message = channel.fetch_message(0)
-
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author != self.user:
