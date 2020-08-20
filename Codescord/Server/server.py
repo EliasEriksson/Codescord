@@ -28,7 +28,7 @@ class Server(Net):
         }
         self.languages = {
             "python": Languages.python,
-            "py": Languages.python,
+            # "py": Languages.python,
 
             "cpp": Languages.cpp,
             "c++": Languages.cpp,
@@ -57,7 +57,7 @@ class Server(Net):
             print("authenticated.")
         else:
             await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
-            raise Errors.NotImplementedByServer("protocol")
+            raise Errors.NotImplementedInProtocol()
 
     async def handle_file(self, connection: socket.socket) -> None:
         """
@@ -122,12 +122,14 @@ class Server(Net):
                     await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
             await self.send_int_as_bytes(connection, Protocol.Status.success)
             print("connection handled.")
-        except Errors.ProcessTimedOut as e:
-            print(e)
+        except Errors.ProcessTimedOut:
+            print(f"process took longer than {Protocol.timeout}s.")
         except Errors.LanguageNotImplementedByServer as e:
-            print(f"language {e} is not implemented by the server.")
-        except Errors.NotImplementedByServer as e:
-            print(f"{e} is not implemented by the server.")
+            print(f"language {e} is not implemented on the server.")
+        except Errors.NotImplementedByRecipient as e:
+            print(f"{e} was not implemented on the client.")
+        except Errors.NotImplementedInProtocol as e:
+            print(f"{e} is not implemented in clients protocol.")
         except Exception as e:
             await self.send_int_as_bytes(connection, Protocol.Status.internal_server_error)
             raise e

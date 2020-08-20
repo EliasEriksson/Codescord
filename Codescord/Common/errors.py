@@ -2,20 +2,15 @@ class Errors:
     class ProcessTimedOut(Exception):
         pass
 
-    class NotImplementedByServer(NotImplementedError):
+    class LanguageNotImplementedByServer(NotImplementedError):
         pass
 
-    class LanguageNotImplementedByServer(NotImplementedByServer):
+    class NotImplementedByRecipient(NotImplementedError):
         pass
 
-    class NotImplementedByClient(NotImplementedError):
+    class NotImplementedInProtocol(NotImplementedError):
         pass
 
     class InternalServerError(Exception):
         pass
 
-    class MaximumRetries(Exception):
-        pass
-
-    class DownloadError(Exception):
-        pass

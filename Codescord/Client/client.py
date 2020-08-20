@@ -127,20 +127,18 @@ class Client(Net):
 
             print("connection handled.")
             return stdout
-        except Errors.InternalServerError:
-            return f"something went wrong internally on the server, please contact developer for update."
-        except Errors.LanguageNotImplementedByServer:
-            print(f"language {source.language} is not implemented by the server.")
-            return f"language {source.language} is not implemented."
         except Errors.ProcessTimedOut:
-            print(f"process took to longer than {Protocol.timeout} to finish.")
-            return f"Your file took too long to process, maximum time {Protocol.timeout}s."
-        except (Errors.NotImplementedByServer, Errors.NotImplementedByClient):
-            return f"client protocol out of sync with server, please contact developer for update."
+            print(f"process took longer than {Protocol.timeout}s.")
+        except Errors.LanguageNotImplementedByServer as e:
+            print(f"language {e} is not implemented on the server.")
+        except Errors.NotImplementedByRecipient as e:
+            print(f"{e} was not implemented on the server.")
+        except Errors.NotImplementedInProtocol as e:
+            print(f"{e} is not implemented in the servers protocol.")
         finally:
             connection.close()
 
-    async def process(self, source: Source, attempts=0, init=True) -> str:
+    async def process(self, source: Source, attempts=0) -> str:
         """
         processes a source object on the processing server
 
@@ -149,8 +147,7 @@ class Client(Net):
 
         :param source: source object with language and source code
         :param attempts: how many attempts of reconnecting that have been done (max limit in self.retries)
-        :param init: if initial call, makes sure it doesnt spam self.close() if all connection tries fails
-        :return:
+        :return: str, the result from processing.
         """
 
         connection = setup_socket()
@@ -161,12 +158,10 @@ class Client(Net):
         except KeyboardInterrupt:
             pass
         except ConnectionError as e:
+            connection.close()
             if attempts < self.retries:
                 print(e)
                 print(f"connection was refused retrying with attempts number {attempts}.")
                 await asyncio.sleep(3)
-                return await self.process(source, attempts + 1, False)
+                return await self.process(source, attempts + 1)
             return f"Processing server down. Please try again later."
-        finally:
-            if init:
-                connection.close()

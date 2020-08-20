@@ -62,6 +62,7 @@ class Net:
 
         makes sure the server response as expected.
         raises the correct error if this is not the case.
+        should raise all errors in Errors
 
         :param connection: connection to the server.
         :param status: the expected status code.
@@ -70,29 +71,26 @@ class Net:
         :raises NotImplementedByServer: if the instruction is not implemented by the server.
         :raises NotImplementedByClient: if the instruction is not implemented by the client.
         :raises InternalServerError:if the server can communicate but something goes wrong on the server side.
+        :raises AssertionError: if either
 
         :return: None
         """
         print(f"asserting response status ({status})...")
         response = await self.response_as_int(connection)
+
         if response == status:
             print(f"response passed assertion ({status}).")
-        elif response == Protocol.Status.not_implemented:
-            print(f"response was `{response}` (not implemented) expected `{status}`.")
-            raise Errors.NotImplementedByServer()
-        elif response == Protocol.Status.internal_server_error:
-            print(f"response was `{response}` (internal server error) expected `{status}`.")
-            raise Errors.InternalServerError()
-        elif response == Protocol.Status.process_timeout:
-            print(f"process took longer than {Protocol.timeout}")
-            raise Errors.ProcessTimedOut()
-        elif response == Protocol.Status.language_not_implemented:
-            raise Errors.LanguageNotImplementedByServer()
-        elif response not in [getattr(Protocol.Status, attr) for attr in dir(Protocol.Status)]:
-            print(f"response `{response}` does not exist in Protocol.")
-            raise Errors.NotImplementedByClient(f"Could not find status {response} in Protocol.")
         else:
-            raise AssertionError(f"expected status: {status}, got: {response} instead.")
+            print(f"response was `{response}` expected {status}.")
+            if response == Protocol.Status.not_implemented:
+                raise Errors.NotImplementedByRecipient(response)
+            elif response == Protocol.Status.internal_server_error:
+                raise Errors.InternalServerError()
+            elif response == Protocol.Status.process_timeout:
+                raise Errors.ProcessTimedOut()
+            elif response not in [getattr(Protocol.Status, attr) for attr in dir(Protocol.Status)]:
+                raise Errors.NotImplementedInProtocol(response)
+            raise AssertionError(f"code `{response}` in assert_response_status")
 
     async def download(self, connection: socket.socket) -> bytes:
         """
