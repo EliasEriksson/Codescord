@@ -1,3 +1,4 @@
 discord.py
 tortoise-orm
 aiosqlite
+aionotify
