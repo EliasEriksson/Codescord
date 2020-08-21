@@ -1,12 +1,35 @@
 from Codescord.Common.source import Source
+from tortoise import Tortoise
+from tortoise import run_async
 import asyncio
 import Codescord
 import Discord
 import os
 import argparse
+from pathlib import Path
 
 
-async def runner():
+async def init_tortoise() -> None:
+    await Tortoise.init(
+        db_url="sqlite://db.db",
+        modules={"models": ["Discord.models"]})
+
+
+async def _create_database() -> None:
+    path = Path("db.db")
+    if path.exists():
+        path.unlink()
+    await init_tortoise()
+    await Tortoise.generate_schemas()
+
+
+def create_database() -> None:
+    run_async(_create_database())
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(_create_database())
+
+
+async def _run_client():
     py1 = Source(
         language="py",
         code="from time import sleep\nsleep(3)\nprint('py1')"
@@ -45,13 +68,20 @@ async def runner():
 
 def run_client() -> None:
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner())
+    loop.run_until_complete(_run_client())
 
 
 def run_client_with_discord():
-    token = os.environ.get("DISCORD_DEV")
-    client = Discord.Client()
-    client.run(token)
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(init_tortoise())
+        token = os.environ.get("DISCORD_DEV")
+        client = Discord.Client(loop=loop)
+        loop.run_until_complete(client.start(token))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(Tortoise.close_connections())
 
 
 def run_server():
@@ -67,7 +97,8 @@ if __name__ == '__main__':
     modes = {
         "client": run_client,
         "discord": run_client_with_discord,
-        "server": run_server
+        "server": run_server,
+        "create-database": create_database
     }
 
     try:
@@ -75,5 +106,6 @@ if __name__ == '__main__':
             modes[result.mode]()
         else:
             print(f"mode must be 'client', 'discord' or 'server' not '{result.mode}'")
+            quit()
     except KeyboardInterrupt:
         pass
