@@ -105,7 +105,9 @@ if __name__ == '__main__':
         if result.mode in modes:
             modes[result.mode]()
         else:
-            print(f"mode must be 'client', 'discord' or 'server' not '{result.mode}'")
+            print("mode must be ", end="")
+            print(", ".join(f"'{mode}'" for mode in modes.keys()), end="")
+            print(f", not '{result.mode}'")
             quit()
     except KeyboardInterrupt:
         pass
