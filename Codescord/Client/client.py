@@ -1,3 +1,4 @@
+from typing import Tuple
 from ..Common.net import Net
 from ..Common.errors import Errors
 from ..Common.protocol import Protocol
@@ -138,7 +139,7 @@ class Client(Net):
         finally:
             connection.close()
 
-    async def process(self, source: Source, attempts=0) -> str:
+    async def process(self, source: Source, address: Tuple[str, int],attempts=0) -> str:
         """
         processes a source object on the processing server
 
@@ -147,12 +148,13 @@ class Client(Net):
 
         :param source: source object with language and source code
         :param attempts: how many attempts of reconnecting that have been done (max limit in self.retries)
+        :param address:
         :return: str, the result from processing.
         """
 
         connection = setup_socket()
         try:
-            await self.loop.sock_connect(connection, ("localhost", 6969))
+            await self.loop.sock_connect(connection, address)
             stdout = await self.handle_connection(connection, source)
             return stdout if stdout else "There was an error processing the source."
         except KeyboardInterrupt:
@@ -163,5 +165,5 @@ class Client(Net):
                 print(e)
                 print(f"connection was refused retrying with attempts number {attempts}.")
                 await asyncio.sleep(3)
-                return await self.process(source, attempts + 1)
+                return await self.process(source, address, attempts + 1)
             return f"Processing server down. Please try again later."

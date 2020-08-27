@@ -1,14 +1,12 @@
 FROM python:3.8-buster
 
-WORKDIR /app
+WORKDIR /Codescord
 
-ENV PORT 6969
+COPY Codescord /Codescord/Codescord
+COPY Discord /Codescord/Discord
+COPY requirements.txt /Codescord/requirements.txt
+COPY main.py /Codescord/main.py
 
-COPY Codescord /app/Codescord
-COPY Discord /app/Discord
-COPY requirements.txt /app/requirements.txt
-COPY main.py /app/main.py
-
-RUN python -m pip install -r /app/requirements.txt
+RUN python -m pip install -r /Codescord/requirements.txt
 
 CMD ["python", "main.py", "server"]
