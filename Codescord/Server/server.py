@@ -11,7 +11,7 @@ import tempfile
 def setup_socket() -> socket.socket:
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("", 6969))
+    sock.bind(("", 6090))
     sock.setblocking(False)
     sock.listen()
     return sock
@@ -28,7 +28,7 @@ class Server(Net):
         }
         self.languages = {
             "python": Languages.python,
-            # "py": Languages.python,
+            "py": Languages.python,
 
             "cpp": Languages.cpp,
             "c++": Languages.cpp,

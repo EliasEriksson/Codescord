@@ -22,7 +22,7 @@ def setup_socket() -> socket.socket:
 class Client(Net):
     def __init__(self, loop=None) -> None:
         super(Client, self).__init__(loop)
-        self.retries = 3
+        self.retries = 5
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
@@ -139,7 +139,7 @@ class Client(Net):
         finally:
             connection.close()
 
-    async def process(self, source: Source, address: Tuple[str, int],attempts=0) -> str:
+    async def process(self, source: Source, address: Tuple[str, int], attempts=0) -> str:
         """
         processes a source object on the processing server
 
@@ -154,12 +154,21 @@ class Client(Net):
 
         connection = setup_socket()
         try:
+            print(f"connecting to {address}...")
             await self.loop.sock_connect(connection, address)
+            print(f"connected to {address}.")
             stdout = await self.handle_connection(connection, source)
             return stdout if stdout else "There was an error processing the source."
         except KeyboardInterrupt:
-            pass
-        except ConnectionError as e:
+            print(self.loop.is_closed())
+        except (ConnectionRefusedError, ConnectionResetError):
+            if attempts == 0:
+                print("server have probably not started yet, retrying...")
+                await asyncio.sleep(0.45)
+                return await self.process(source, address, attempts + 1)
+            else:
+                return await self.process(source, address, attempts + 1)
+        except (ConnectionAbortedError, BrokenPipeError) as e:
             connection.close()
             if attempts < self.retries:
                 print(e)
@@ -167,3 +176,4 @@ class Client(Net):
                 await asyncio.sleep(3)
                 return await self.process(source, address, attempts + 1)
             return f"Processing server down. Please try again later."
+

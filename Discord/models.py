@@ -19,7 +19,7 @@ class UserMessages(Model):
     server = fields.ForeignKeyField(f"models.{Servers.__name__}")
     channel = fields.ForeignKeyField(f"models.{Channels.__name__}")
     message_id = fields.IntField()
-
+#
 
 class ResponseMessages(Model):
     id = fields.IntField(True)
