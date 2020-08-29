@@ -1,29 +1,61 @@
 # Codescord
 
-requires python3.8+\
-python packages:
-* discord.py
-* tortoise-orm
-* aiosqlite
+#### Public host
+discord [invite link](https://discord.com/api/oauth2/authorize?client_id=749273748934230018&permissions=2048&scope=bot).
 
-docker (https://docs.docker.com/get-docker/)
+#### Currently supported languages
+* python / py
+* cpp / c++
+
+more languages can easily be added by adding a procedure for the language in `Codescord.Common.languages.Languages`
+, pointing to that procedure in `Codescord.Server.server.Server.languages` (in its init)
+and update the docker image to contain the runtime/compilers necessary. \
+PRs are welcome :)
+
+#### Usage
+Simply send a discord message with a highlighted code block.\
+example, raw message: \
+My code is so cool!\
+\```python\
+print("hello world!")\
+\```
+
+what your message looks like in discord:
+
+My code is so cool!
+```python
+print("hello world!")
+```
+
+and the bot will respond with a code block
+
+```
+hello world!
+```
+
+the first text after the tipple \``` is what determines how the code will be run on the server side.
+\```python for python \```c++ for c++. OBS! a new line after the language name is required. see example above.
+
+## If you want to self host
+requirements:
+* python3.8+
+* python packages:
+    * discord.py
+    * tortoise-orm
+    * aiosqlite
+* docker
 
 make sure localhost is allowed to go thru ports 6090:6120+ (one port per possible container, 
 30 ports = 30 concurrent connections).
 
-## Discord invite
-discord [invite link](https://discord.com/api/oauth2/authorize?client_id=749273748934230018&permissions=2048&scope=bot).
-
-
-
-## Prep
+#### Prep
 * install python3.8+ ([source from official python site](https://www.python.org/) or [deadsnakes ppa](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa))
 * install [docker](https://docs.docker.com/get-docker/)
 * set the environment variable `DISCORD_CODESCORD` with the value of your bot token. \
  OBS! must be visible to sudo. \
  add in for example `/etc/environment` with a new line at the bottom `export DISCORD_CODESCORD="your token"`
 
-## To Run
+#### To Run
 1. `git clone https://github.com/EliasEriksson/Codescord.git`
 2. `cd Codescord`
 3. `python3.x -m venv venv`
@@ -33,7 +65,7 @@ discord [invite link](https://discord.com/api/oauth2/authorize?client_id=7492737
 7. `python main.py create-database`
 8. `sudo venv/bin/python main.py client`
 
-## As a Service
+#### As a Service
 1. modify the provided service file to your system/needs.
 As a minimum the path to python and `main.py` needs to be changed.
 if `Codescord/` is located in `/home/<user>/Apps/` tha paths in ExecStart should be: \
