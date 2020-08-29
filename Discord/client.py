@@ -121,7 +121,7 @@ class Client(discord.Client):
         :return: None
         """
         success, stdout = await subprocess(
-            f"docker run -d -p {port}:{6090} --name {uuid} codescord")
+            f"sudo docker run -d -p {port}:{6090} --name {uuid} codescord")
         if not success:
             raise Errors.ContainerStartupError(stdout)
 
@@ -134,12 +134,12 @@ class Client(discord.Client):
         :return: None
         """
         success, stdout = await subprocess(
-            f"docker stop {uuid}")
+            f"sudo docker stop {uuid}")
         if not success:
             raise Errors.ContainerStopError(stdout)
 
         success, stdout = await subprocess(
-            f"docker rm {uuid}")
+            f"sudo docker rm {uuid}")
 
         if not success:
             raise Errors.ContainerRmError(stdout)
@@ -152,7 +152,7 @@ class Client(discord.Client):
 
         :return: id for the docker container
         """
-        while (uuid := str(uuid4())) not in self.used_ids:
+        while (uuid := str(uuid4())) in self.used_ids:
             pass
         self.used_ids.add(uuid)
         return uuid
