@@ -152,7 +152,7 @@ class Client(discord.Client):
 
         :return: id for the docker container
         """
-        while (uuid := str(uuid4())) not in self.used_ids:
+        while (uuid := str(uuid4())) in self.used_ids:
             pass
         self.used_ids.add(uuid)
         return uuid
