@@ -10,16 +10,38 @@ from tortoise.exceptions import DoesNotExist
 
 
 async def edit(stdout: str, message: discord.Message, description: str = None) -> None:
+    """
+    wrapper for discord.Message.edit()
+
+    :param stdout: execution result from executing code
+    :param message: message to edit
+    :param description: message above the execution result
+    :return:
+    """
     description = description if description else ""
     await message.edit(content=f"{description}\n```{stdout}```")
 
 
 async def send(stdout: str, channel: discord.TextChannel, description: str = None) -> discord.Message:
+    """
+    wrapper for discord.TextChannel.send()
+
+    :param stdout: execution result from executing code
+    :param channel: channel to send message in
+    :param description: message above the execution result
+    :return:
+    """
     description = description if description else ""
     return await channel.send(f"{description}\n```{stdout}```")
 
 
 async def subprocess(stdin: str) -> Tuple[bool, str]:
+    """
+    easier wrapper around asyncio.create_subprocess_exec
+
+    :param stdin: command to execute in subprocess
+    :return: result from subprocess
+    """
     process = await asyncio.create_subprocess_exec(
         *stdin.split(" "), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, stderr = await process.communicate()
@@ -31,7 +53,24 @@ async def subprocess(stdin: str) -> Tuple[bool, str]:
 
 
 class Message:
+    """
+    mimics a discord.Message object
+
+    this object is passed down to Client.process() in Client.on_raw_message_edit
+    it mimics the discord.Message objects since Client.process() takes a discord.Message object from
+    Client.on_message() and the event (discord.RawMessageUpdateEvent) can not be casted to discord.Message
+    (at least not recommended in the docs)
+    """
     def __init__(self, message_id: int, author: discord.User, content: str, guild: discord.Guild, channel: discord.TextChannel) -> None:
+        """
+
+        :attr id: the edited message id
+        :attr author: the author of the message
+        :attr content: the content of the message
+        :attr guild: the discord guild (server) where the message was sent
+        :attr channel: the discord TextChannel where the message was sent
+        """
+
         self.id = message_id
         self.author = author
         self.content = content
@@ -41,6 +80,18 @@ class Message:
 
 class Client(discord.Client):
     def __init__(self, loop=None, initial_port: int = 6090) -> None:
+        """
+
+        :param loop:
+        :param initial_port:
+
+        :attr loop: the asyncio event loop
+        :attr codescord_client: the client that is responsible for network traffic to the docker container
+        :attr initial_port: the initial port to open a container for
+        :attr code_pattern: if this re pattern matches its assumed that teh content contains executable code
+        :attr used_ports: ports to docker containers currently in use
+        :attr used_ids: names of docker containers currently in use
+        """
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
         self.codescord_client = Codescord.Client(self.loop)
