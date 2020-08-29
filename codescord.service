@@ -1,0 +1,9 @@
+[Unit]
+Description=Codescord
+After=multi-user.target
+
+[Service]
+ExecStart=PATH/TO/PYTHON PATH/TO/main.py client
+
+[Install]
+WantedBy=multi-user.target

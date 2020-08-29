@@ -9,10 +9,10 @@ import asyncio
 
 def setup_socket() -> socket.socket:
     """
-    sets up a socket used by the client
+    sets up a socket used by the client.
 
-    blocking must be false since used in async context
-    :return: the clients socket used to connect to the processing server
+    blocking must be false since used in async context.
+    :return: the clients socket used to connect to the processing server.
     """
     sock = socket.socket()
     sock.setblocking(False)
@@ -20,24 +20,33 @@ def setup_socket() -> socket.socket:
 
 
 class Client(Net):
+    """
+    this client will be what Discord.Client uses to send source code to the Codescord.Server.
+    the Discord.Client will have one instance of this client.
+    this client will attempts to make a conenction to a Codescord.Server inside of a docker container
+    when Codescord.Client.process is called.
+
+    this client will then attempt to:
+    authenticate with the server,
+    send the source code to the server,
+    receive the stdout from the server
+    and then close the connection.
+    """
     def __init__(self, loop=None) -> None:
         super(Client, self).__init__(loop)
         self.retries = 5
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
-        authenticates the protocol that is used by the client and server
+        authenticates the protocol that is used by the client and server.
 
-        by authenticating the protocol the client sends the protocol to the server
-        and the server will compare and verify it. if the protocols match the process can go on
+        by authenticating the protocol the client sends the protocol to the server.
+        and the server will compare and verify it. if the protocols match the process can go on.
 
-        if server denies verification NotImplementedByServer is raised to indicate the protocols are not the same
-        if something else goes wrong on server side InternalServerError is raised
+        if server denies verification NotImplementedByServer is raised to indicate the protocols are not the same.
+        if something else goes wrong on server side InternalServerError is raised.
 
-        :param connection: the connection to the processing server
-
-        :raises NotImplementedByServer: if the instruction is not implemented by the server.
-        :raises ConnectionError: if any sort of connection error occurs.
+        :param connection: the connection to the processing server.
 
         :return: None
         """
@@ -51,17 +60,15 @@ class Client(Net):
 
     async def handle_source(self, connection: socket.socket, source: Source) -> None:
         """
-        handles the sending of the source file
+        handles the sending of the source file.
 
-        attempts to send the source file to the processing server
-
-        if anything goes wrong InternalServerError is raised
+        attempts to send the source file to the processing server.
 
         :raises InternalServerError: if the server can communicate but something goes wrong on the other side.
         :raises ConnectionError: if any sort of connection error occurs.
 
         :param connection: the connection to the processing server.
-        :param source: source object with language and source code
+        :param source: source object with language and source code.
         :return: None
         """
         print("handling the source...")
@@ -84,8 +91,7 @@ class Client(Net):
 
         if message is not a text message NotImplementedByClient is raised.
 
-        :raises: NotImplementedByClient
-        :return:
+        :return: stdout from the processing server.
         """
         print("handling stdout...")
         await self.assert_response_status(connection, Protocol.Status.text)
@@ -108,8 +114,6 @@ class Client(Net):
 
         :param connection: the connection to the processing server.
         :param source: source object with language and source code.
-
-        :raises ConnectionError: if any sort of connection error occurs.
 
         :return: None
         """
@@ -141,15 +145,16 @@ class Client(Net):
 
     async def process(self, source: Source, address: Tuple[str, int], attempts=0) -> str:
         """
-        processes a source object on the processing server
+        processes a source object on the processing server.
 
         starts the process of sending over the source object to the server to process
-        and receiving the result back from stdout
+        and receiving the result back from stdout.
 
-        :param source: source object with language and source code
-        :param attempts: how many attempts of reconnecting that have been done (max limit in self.retries)
-        :param address:
-        :return: str, the result from processing.
+        :param source: source object with language and source code.
+        :param attempts: how many attempts of reconnecting that have been done (max limit in self.retries).
+        :param address: ip address with port to connect to.
+
+        :return: the result from processing.
         """
 
         connection = setup_socket()

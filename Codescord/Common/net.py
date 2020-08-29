@@ -6,14 +6,17 @@ from .errors import Errors
 
 
 class Net:
+    """
+    contains base net code for Codescord.Server and Codescord.Client.
+    """
     def __init__(self, loop=None) -> None:
         """
         initialises the client object with event loop and max retries for connection errors.
 
-        :attr loop: the event loop
+        :attr loop: the event loop.
         :attr retries: amount of times to retry the connection if it dies.
 
-        :param loop: the event loop
+        :param loop: the event loop.
         """
 
         self.loop = loop if loop else asyncio.get_event_loop()
@@ -24,7 +27,7 @@ class Net:
 
         mostly a convenience method to automatically convert received bytes to int.
         OBS! integer can not be larger than 1 byte.
-        if necessary this can be changed by using the first section of the upload code
+        if necessary this can be changed by using the first section of the upload code.
 
         :param length: buffer size.
         :param endian: big or little endian int.
@@ -42,8 +45,9 @@ class Net:
 
     async def send_int_as_bytes(self, connection: socket.socket, integer: int, length=Protocol.buffer_size, endian="big", signed=False) -> None:
         """
-        sends an integer to the recipient
-        OBS! only 1 byte int supported
+        sends an integer to the recipient.
+
+        OBS! only 1 byte int supported.
 
         :param connection: connection to the recipient.
         :param integer: integer to be sent.
@@ -58,11 +62,11 @@ class Net:
 
     async def assert_response_status(self, connection: socket.socket, status=Protocol.Status.success) -> None:
         """
-        makes sure the server response is the the same the client expects
+        makes sure the server response is the the same the client expects.
 
         makes sure the server response as expected.
         raises the correct error if this is not the case.
-        should raise all errors in Errors
+        should raise all errors in Errors.
 
         :param connection: connection to the server.
         :param status: the expected status code.
@@ -70,8 +74,8 @@ class Net:
         :raises ConnectionError: if anything goes wrong with the connection (DCs etc).
         :raises NotImplementedByServer: if the instruction is not implemented by the server.
         :raises NotImplementedByClient: if the instruction is not implemented by the client.
-        :raises InternalServerError:if the server can communicate but something goes wrong on the server side.
-        :raises AssertionError: if either
+        :raises InternalServerError: if the server can communicate but something goes wrong on the server side.
+        :raises AssertionError: if either.
 
         :return: None
         """
@@ -99,8 +103,6 @@ class Net:
 
         used to download whats captured in stdout from the processed source
         as well as the protocol.
-
-        :raises ConnectionError: if anything goes wrong with the connection (DCs etc)
 
         :param connection: connection to the processing server.
         :return: None
@@ -134,9 +136,6 @@ class Net:
 
         :param connection: connection to the processing server.
         :param payload: the byte blob of data to be sent to the recipient.
-
-        :raises ConnectionError: if anything goes wrong with the connection (DCs etc).
-        :raises InternalServerError:if the server can communicate but something goes wrong on the server side.
 
         :return: None
         """

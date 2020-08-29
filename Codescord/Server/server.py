@@ -9,6 +9,11 @@ import tempfile
 
 
 def setup_socket() -> socket.socket:
+    """
+    sets up the server socket for clients to connect to.
+
+    :return: the generated socket.
+    """
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("", 6090))
@@ -18,7 +23,24 @@ def setup_socket() -> socket.socket:
 
 
 class Server(Net):
+    """
+    this server will be living in a docker container started by Discord.Client.
+    the server will be listening on port 6090 for connections.
+    once a connection is established the server will expect the client to send some instruction.
+    this should always be the instruction to AUTHENTICATE first and should be followed up with a FILE download to
+    some source file for some language that will then be executed and a TEXT instruction will be sent back with the
+    generated stdout.
+    the server should then be told to close down and the Discord.Client will be handling the closing
+    of the container when everything have closed gracefully.
+    """
     def __init__(self, loop=None):
+        """
+        :param loop: asyncio event loop
+
+        :attr socket: the server socket clients connects to
+        :attr instructions: a mapping of received instruction from client to how the server is supposed to act.
+        :attr languages: dict of supported programming languages that maps to how to execute said language.
+        """
         super(Server, self).__init__(loop)
         self.socket = setup_socket()
 
@@ -36,17 +58,14 @@ class Server(Net):
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
-        authenticates the protocol that is used the client and server
+        authenticates the protocol that is used the client and server.
 
         by authenticating the protocol the client sends the protocol to the server
-        and the server will compare and verify it. if the protocols match the process can go on
+        and the server will compare and verify it. if the protocols match the process can go on.
 
-        if server denies verification NotImplementedByServer is raised to indicate the protocols are not the same
-        if something else goes wrong on server side InternalServerError is raised
+        :param connection: the connection to the processing server.
 
-        :param connection: the connection to the processing server
-
-        :raises ConnectionError: if any sort of connection error occurs.
+        :raises Errors.NotImplementedInProtocol: protocol have been updated but the docker image was never rebuilt.
 
         :return: None
         """
@@ -61,13 +80,16 @@ class Server(Net):
 
     async def handle_file(self, connection: socket.socket) -> None:
         """
-        handles the downloading and execution of a source file
+        handles the downloading and execution of a source file.
 
         first downloads the language from the client and sees if its a supported language.
         if it is the language source is downloaded.
         the source is then saved to a file in a tempdir and executed with
         procedures from Codescord.Common.Languages.
         the standard out is captured and sent back to the client.
+
+        :raises Errors.ProcessTimedOut: processing the source file took too long.
+        :raises Errors.LanguageNotImplementedByServer: language was not listed in self.languages.
 
         :param connection: the connection to the processing server.
         :return: None
@@ -138,9 +160,9 @@ class Server(Net):
 
     async def run(self) -> None:
         """
-        starts the server
+        starts the server.
 
-        awaits connections and creates a new task to handle the connection
+        awaits connections and creates a new task to handle the connection.
 
         :return: None
         """

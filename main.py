@@ -1,4 +1,3 @@
-from Codescord.Common.source import Source
 from tortoise import Tortoise
 from tortoise import run_async
 import asyncio
@@ -10,13 +9,26 @@ from pathlib import Path
 import subprocess
 
 
-def process(stdin: str):
+def process(stdin: str) -> str:
+    """
+    wrapper for subprocess.
+
+    :param stdin: stdin
+    :return: stdout
+    """
     p = subprocess.run(stdin.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout = p.stdout.decode("utf-8") if p.returncode == 0 else p.stderr.decode("utf-8")
     return stdout
 
 
-def close_containers():
+def close_containers() -> None:
+    """
+    final resort to make sure all the docker containers are closed after some major exception.
+
+    most of the time this is going to be keyboard interrupt.
+
+    :return: None
+    """
     stdout = process("sudo docker ps -a")
 
     for line in stdout.split("\n"):
@@ -27,12 +39,22 @@ def close_containers():
 
 
 async def init_tortoise() -> None:
+    """
+    initializes tortoises connection to the database.
+
+    :return: None
+    """
     await Tortoise.init(
         db_url="sqlite://db.db",
         modules={"models": ["Discord.models"]})
 
 
 async def _create_database() -> None:
+    """
+    asynchronous version of create_database.
+
+    :return: None
+    """
     path = Path("db.db")
     if path.exists():
         path.unlink()
@@ -41,10 +63,20 @@ async def _create_database() -> None:
 
 
 def create_database() -> None:
+    """
+    sets up and creates the database for the Discord.Client.
+
+    :return: None
+    """
     run_async(_create_database())
 
 
-def run_client():
+def run_client() -> None:
+    """
+    starts the Discord.Client.
+
+    :return: None
+    """
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(init_tortoise())
@@ -55,21 +87,28 @@ def run_client():
         loop.run_until_complete(Tortoise.close_connections())
 
 
-def run_server():
+def run_server() -> None:
+    """
+    starts the Codescord.Server.
+
+    :return: None
+    """
     loop = asyncio.get_event_loop()
     server = Codescord.Server(loop=loop)
     loop.run_until_complete(server.run())
 
 
 if __name__ == '__main__':
+    os.chdir(Path(__file__).parent)
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", type=str, default="server", help="'client', 'discord' or 'server'")
-    result = parser.parse_args()
     modes = {
         "client": run_client,
         "server": run_server,
         "create-database": create_database
     }
+    mode_help = ", ".join(f"'{mode}'" for mode in modes.keys())
+    parser.add_argument("mode", type=str, default="client", help=mode_help)
+    result = parser.parse_args()
 
     try:
         if result.mode in modes:
