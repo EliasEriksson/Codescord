@@ -1,2 +1,2 @@
 from .client import Client
-__all__ = ["client"]
+__all__ = ["Client"]
