@@ -32,13 +32,13 @@ def close_containers() -> None:
 
     :return: None
     """
-    stdout = process("docker ps -a")
+    stdout = process("sudo docker ps -a")
 
     for line in stdout.split("\n"):
         if "codescord" in line:
             name = line.split()[-1]
-            process(f"docker stop {name}")
-            process(f"docker rm {name}")
+            process(f"sudo docker stop {name}")
+            process(f"sudo docker rm {name}")
 
 
 async def init_tortoise() -> None:
@@ -53,7 +53,7 @@ async def init_tortoise() -> None:
 
 
 def build_docker_image():
-    process("docker build --tag codescord .", False)
+    process("sudo docker build --tag codescord .", False)
 
 
 async def _create_database() -> None:
@@ -92,6 +92,9 @@ def run_client() -> None:
         loop.run_until_complete(client.start(token))
     finally:
         loop.run_until_complete(Tortoise.close_connections())
+        print("closing containers...")
+        close_containers()
+        print("closed containers.")
 
 
 def run_server() -> None:
@@ -128,7 +131,4 @@ if __name__ == '__main__':
             quit()
     except KeyboardInterrupt:
         pass
-    finally:
-        print("closing containers...")
-        close_containers()
-        print("closed containers.")
+
