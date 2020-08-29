@@ -1,4 +1,4 @@
-# Pyscord
+# Codescord
 
 requires python3.8+\
 python packages:
@@ -10,6 +10,11 @@ docker (https://docs.docker.com/get-docker/)
 
 make sure localhost is allowed to go thru ports 6090:6120+ (one port per possible container, 
 30 ports = 30 concurrent connections).
+
+## Discord invite
+discord [invite link](https://discord.com/api/oauth2/authorize?client_id=749273748934230018&permissions=2048&scope=bot).
+
+
 
 ## Prep
 * install python3.8+ ([source from official python site](https://www.python.org/) or [deadsnakes ppa](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa))
