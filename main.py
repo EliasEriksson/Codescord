@@ -1,3 +1,4 @@
+from typing import *
 from tortoise import Tortoise
 from tortoise import run_async
 import asyncio
@@ -9,16 +10,18 @@ from pathlib import Path
 import subprocess
 
 
-def process(stdin: str) -> str:
+def process(stdin: str, capture_output=True) -> Optional[str]:
     """
     wrapper for subprocess.
 
+    :param capture_output:
     :param stdin: stdin
     :return: stdout
     """
-    p = subprocess.run(stdin.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout = p.stdout.decode("utf-8") if p.returncode == 0 else p.stderr.decode("utf-8")
-    return stdout
+    p = subprocess.run(stdin.split(), capture_output=capture_output)
+    if capture_output:
+        stdout = p.stdout.decode("utf-8") if p.returncode == 0 else p.stderr.decode("utf-8")
+        return stdout
 
 
 def close_containers() -> None:
@@ -29,13 +32,13 @@ def close_containers() -> None:
 
     :return: None
     """
-    stdout = process("sudo docker ps -a")
+    stdout = process("docker ps -a")
 
     for line in stdout.split("\n"):
         if "codescord" in line:
             name = line.split()[-1]
-            process(f"sudo docker stop {name}")
-            process(f"sudo docker rm {name}")
+            process(f"docker stop {name}")
+            process(f"docker rm {name}")
 
 
 async def init_tortoise() -> None:
@@ -47,6 +50,10 @@ async def init_tortoise() -> None:
     await Tortoise.init(
         db_url="sqlite://db.db",
         modules={"models": ["Discord.models"]})
+
+
+def build_docker_image():
+    process("docker build --tag codescord .", False)
 
 
 async def _create_database() -> None:
@@ -104,7 +111,8 @@ if __name__ == '__main__':
     modes = {
         "client": run_client,
         "server": run_server,
-        "create-database": create_database
+        "create-database": create_database,
+        "build-docker-image": build_docker_image,
     }
     mode_help = ", ".join(f"'{mode}'" for mode in modes.keys())
     parser.add_argument("mode", type=str, default="client", help=mode_help)
