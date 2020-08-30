@@ -87,7 +87,7 @@ def run_client() -> None:
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(init_tortoise())
-        token = os.environ.get("DISCORD_CODESCORD")
+        token = os.environ.get("DISCORD_DEV")
         client = Discord.Client(loop=loop)
         loop.run_until_complete(client.start(token))
     finally:
