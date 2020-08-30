@@ -1,10 +1,29 @@
-from typing import Tuple
+from typing import Optional, List, Tuple, Callable, Coroutine, Set
 from ..Common.net import Net
 from ..Common.errors import Errors
 from ..Common.protocol import Protocol
 from ..Common.source import Source
 import socket
 import asyncio
+from uuid import uuid4
+from functools import partial
+
+
+async def subprocess(stdin: str) -> Tuple[bool, str]:
+    """
+    easier wrapper around asyncio.create_subprocess_exec
+
+    :param stdin: command to execute in subprocess
+    :return: result from subprocess
+    """
+    process = await asyncio.create_subprocess_exec(
+        *stdin.split(" "), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    stdout, stderr = await process.communicate()
+    if not stdout:
+        print(f"failed with '{stdin}'")
+        return False, stderr.decode("utf-8")
+    print(f"succeeded with '{stdin}'")
+    return True, stdout.decode("utf-8")
 
 
 def setup_socket() -> socket.socket:
@@ -17,6 +36,119 @@ def setup_socket() -> socket.socket:
     sock = socket.socket()
     sock.setblocking(False)
     return sock
+
+
+class QueuedPool:
+    def __init__(self, start_port: int, end_port: int = None, loop=None):
+        print("starting to initialize the queued pool")
+        self.loop: asyncio.AbstractEventLoop = loop
+        self.start_port = start_port
+        self.end_port = end_port if end_port else start_port
+        self.size = self.end_port - self.start_port + 1
+        assert self.start_port <= self.end_port
+        self.end_port = end_port
+        self.used_ports = set()
+        self.used_ids = set()
+
+        self.queue: List[Tuple[asyncio.Future, Callable[[], Coroutine]]] = []
+        self.pending: Set[asyncio.Task] = set()
+        self.loop.create_task(self._process_queue())
+        print("initialized the QuedPol")
+
+    @staticmethod
+    async def next_task():
+        await asyncio.sleep(0.01)
+
+    @staticmethod
+    async def start_container(uuid: str, port: int) -> None:
+        """
+        starts a docker container with provided id and port.
+
+        :param port: local port to expose to the container.
+        :param uuid: container id
+        :return: None
+        """
+        success, stdout = await subprocess(
+            f"sudo docker run -d -p {port}:{6090} --name {uuid} codescord")
+        if not success:
+            raise Errors.ContainerStartupError(stdout)
+
+    @staticmethod
+    async def stop_container(uuid: str) -> None:
+        """
+        stops a docker container with some id.
+
+        :param uuid: container id
+        :return: None
+        """
+        success, stdout = await subprocess(
+            f"sudo docker stop {uuid}")
+        if not success:
+            raise Errors.ContainerStopError(stdout)
+
+        success, stdout = await subprocess(
+            f"sudo docker rm {uuid}")
+
+        if not success:
+            raise Errors.ContainerRmError(stdout)
+
+    async def schedule_process(self, process: Callable[[], Coroutine]):
+        future = self.loop.create_future()
+        self.queue.append((future, process))
+        await future
+        return future.result()
+
+    async def get_port(self) -> int:
+        if self.end_port:
+            while True:
+                for port in range(self.start_port, self.end_port + 1):
+                    if port not in self.used_ports:
+                        self.used_ports.add(port)
+                        return port
+                await self.next_task()
+        else:
+            port = self.start_port
+            while True:
+                if port not in self.used_ports:
+                    self.used_ports.add(port)
+                    return port
+                port += 1
+                if port > 65535:
+                    port = self.start_port
+                await self.next_task() # so other processes can run
+
+    def get_id(self) -> str:
+        while True:
+            uuid = str(uuid4())
+            if uuid not in self.used_ids:
+                self.used_ids.add(uuid)
+                return uuid
+
+    async def _process_queue(self) -> None:
+        while True:
+            if len(self.pending) < self.size:
+                if self.queue:
+                    uuid = self.get_id()
+                    port = await self.get_port()
+
+                    task = asyncio.create_task(self.process(uuid, port))
+                    task.add_done_callback(partial(self.cleanup, uuid, port, task))
+                    self.pending.add(task)
+            await self.next_task()
+
+    async def process(self, uuid: str, port: int):
+        future, process = self.queue.pop(0)
+        await self.start_container(uuid, port)
+        await asyncio.sleep(0.5)  # wait a little for the container to start
+        result = await process(("localhost", port))
+
+        asyncio.create_task(self.stop_container(uuid))
+        future.set_result(result)
+
+    def cleanup(self, uuid: str, port: int, task: asyncio.Task, _) -> None:
+        self.used_ids.remove(uuid)
+        self.used_ports.remove(port)
+        self.pending.remove(task)
 
 
 class Client(Net):
@@ -32,9 +164,18 @@ class Client(Net):
     receive the stdout from the server
     and then close the connection.
     """
-    def __init__(self, loop=None) -> None:
+    def __init__(self, start_port: int, end_port: Optional[int], loop=None) -> None:
+        print("starting to initialize the codescord client")
         super(Client, self).__init__(loop)
+        self.start_port = start_port
+        self.end_port = end_port if end_port else start_port
+        assert self.start_port <= self.end_port
         self.retries = 5
+        self.used_ports = set()
+        self.used_ids = set()
+
+        self.pool = QueuedPool(start_port, end_port, loop)
+        print("initialized the CodescordClient")
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
@@ -143,6 +284,10 @@ class Client(Net):
         finally:
             connection.close()
 
+    async def schedule_process(self, source: Source) -> str:
+        process = partial(self.process, source)
+        return await self.pool.schedule_process(process)
+
     async def process(self, source: Source, address: Tuple[str, int], attempts=0) -> str:
         """
         processes a source object on the processing server.
@@ -169,7 +314,7 @@ class Client(Net):
         except (ConnectionRefusedError, ConnectionResetError):
             if attempts == 0:
                 print("server have probably not started yet, retrying...")
-                await asyncio.sleep(0.45)
+                await asyncio.sleep(0.1)
                 return await self.process(source, address, attempts + 1)
             else:
                 return await self.process(source, address, attempts + 1)
@@ -178,7 +323,9 @@ class Client(Net):
             if attempts < self.retries:
                 print(e)
                 print(f"connection was refused retrying with attempts number {attempts}.")
-                await asyncio.sleep(3)
+                await asyncio.sleep(0.5)
                 return await self.process(source, address, attempts + 1)
             return f"Processing server down. Please try again later."
+
+
 
