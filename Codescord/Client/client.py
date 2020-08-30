@@ -40,7 +40,6 @@ def setup_socket() -> socket.socket:
 
 class QueuedPool:
     def __init__(self, start_port: int, end_port: int = None, loop=None):
-        print("starting to initialize the queued pool")
         self.loop: asyncio.AbstractEventLoop = loop
         self.start_port = start_port
         self.end_port = end_port if end_port else start_port
@@ -53,7 +52,6 @@ class QueuedPool:
         self.queue: List[Tuple[asyncio.Future, Callable[[], Coroutine]]] = []
         self.pending: Set[asyncio.Task] = set()
         self.loop.create_task(self._process_queue())
-        print("initialized the QuedPol")
 
     @staticmethod
     async def next_task():
@@ -74,10 +72,11 @@ class QueuedPool:
             raise Errors.ContainerStartupError(stdout)
 
     @staticmethod
-    async def stop_container(uuid: str) -> None:
+    async def stop_container(uuid: str, port: int) -> None:
         """
         stops a docker container with some id.
 
+        :param port:
         :param uuid: container id
         :return: None
         """
@@ -88,6 +87,8 @@ class QueuedPool:
 
         success, stdout = await subprocess(
             f"sudo docker rm {uuid}")
+
+        print(f"successfully removed container running on port {port}")
 
         if not success:
             raise Errors.ContainerRmError(stdout)
@@ -115,7 +116,7 @@ class QueuedPool:
                 port += 1
                 if port > 65535:
                     port = self.start_port
-                await self.next_task() # so other processes can run
+                await self.next_task()
 
     def get_id(self) -> str:
         while True:
@@ -130,9 +131,10 @@ class QueuedPool:
                 if self.queue:
                     uuid = self.get_id()
                     port = await self.get_port()
-
+                    print(f"launching process on port {port}")
                     task = asyncio.create_task(self.process(uuid, port))
-                    task.add_done_callback(partial(self.cleanup, uuid, port, task))
+                    asyncio.create_task(self.cleanup(uuid, port, task))
+                    # task.add_done_callback(partial(self.cleanup, uuid, port, task))
                     self.pending.add(task)
             await self.next_task()
 
@@ -142,10 +144,12 @@ class QueuedPool:
         await asyncio.sleep(0.5)  # wait a little for the container to start
         result = await process(("localhost", port))
 
-        asyncio.create_task(self.stop_container(uuid))
         future.set_result(result)
 
-    def cleanup(self, uuid: str, port: int, task: asyncio.Task, _) -> None:
+    async def cleanup(self, uuid: str, port: int, task: asyncio.Task) -> None:
+        await task
+        freeing_port = asyncio.create_task(self.stop_container(uuid, port))
+        await freeing_port
         self.used_ids.remove(uuid)
         self.used_ports.remove(port)
         self.pending.remove(task)
@@ -165,7 +169,6 @@ class Client(Net):
     and then close the connection.
     """
     def __init__(self, start_port: int, end_port: Optional[int], loop=None) -> None:
-        print("starting to initialize the codescord client")
         super(Client, self).__init__(loop)
         self.start_port = start_port
         self.end_port = end_port if end_port else start_port
@@ -175,7 +178,6 @@ class Client(Net):
         self.used_ids = set()
 
         self.pool = QueuedPool(start_port, end_port, loop)
-        print("initialized the CodescordClient")
 
     async def authenticate(self, connection: socket.socket) -> None:
         """

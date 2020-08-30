@@ -33,23 +33,6 @@ async def send(stdout: str, channel: discord.TextChannel, description: str = Non
     return await channel.send(f"{description}\n```{stdout}```")
 
 
-async def subprocess(stdin: str) -> Tuple[bool, str]:
-    """
-    easier wrapper around asyncio.create_subprocess_exec
-
-    :param stdin: command to execute in subprocess
-    :return: result from subprocess
-    """
-    process = await asyncio.create_subprocess_exec(
-        *stdin.split(" "), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
-    if not stdout:
-        print(f"failed with '{stdin}'")
-        return False, stderr.decode("utf-8")
-    print(f"succeeded with '{stdin}'")
-    return True, stdout.decode("utf-8")
-
-
 class Message:
     """
     mimics a discord.Message object (adapter?)
@@ -107,65 +90,6 @@ class Client(discord.Client):
         self.used_ports = set()
         self.used_ids = set()
 
-    # @staticmethod
-    # async def start_container(port: int, uuid: str) -> None:
-    #     """
-    #     starts a docker container with provided id and port.
-    #
-    #     :param port: local port to expose to the container.
-    #     :param uuid: container id
-    #     :return: None
-    #     """
-    #     success, stdout = await subprocess(
-    #         f"sudo docker run -d -p {port}:{6090} --name {uuid} codescord")
-    #     if not success:
-    #         raise Errors.ContainerStartupError(stdout)
-    #
-    # @staticmethod
-    # async def stop_container(uuid: str) -> None:
-    #     """
-    #     stops a docker container with some id.
-    #
-    #     :param uuid: container id
-    #     :return: None
-    #     """
-    #     success, stdout = await subprocess(
-    #         f"sudo docker stop {uuid}")
-    #     if not success:
-    #         raise Errors.ContainerStopError(stdout)
-    #
-    #     success, stdout = await subprocess(
-    #         f"sudo docker rm {uuid}")
-    #
-    #     if not success:
-    #         raise Errors.ContainerRmError(stdout)
-
-    # def get_uuid(self) -> str:
-    #     """
-    #     generates a container id from uuid4 and adds it to self.used_ids
-    #
-    #     this while loop will pretty much never run more than once
-    #
-    #     :return: id for the docker container
-    #     """
-    #     while (uuid := str(uuid4())) in self.used_ids:
-    #         pass
-    #     self.used_ids.add(uuid)
-    #     return uuid
-    #
-    # def get_next_port(self) -> int:
-    #     """
-    #     gets the next free port in line starting from self.initial_port.
-    #
-    #     :return: container port.
-    #     """
-    #     port = self.initial_port
-    #     while True:
-    #         if port not in self.used_ports:
-    #             self.used_ports.add(port)
-    #             return port
-    #         port += 1
-
     async def process(self, message: Union[Message, discord.Message]) -> str:
         """
         scans the discord message for highlighted a highlighted code block to attempt execution.
@@ -188,20 +112,10 @@ class Client(discord.Client):
         if message.author != self.user:
             if match := self.code_pattern.search(message.content):
                 source = Codescord.Source(*match.groups())
-                # port = self.get_next_port()
-                # uuid = self.get_uuid()
-                try:
-                    # await self.start_container(port, uuid)
 
-                    stdout = await self.codescord_client.schedule_process(source)
+                stdout = await self.codescord_client.schedule_process(source)
 
-                    # asyncio.create_task(self.stop_container(uuid))
-
-                    return stdout
-                finally:
-                    pass
-                #     self.used_ports.remove(port)
-                #     self.used_ids.remove(uuid)
+                return stdout
 
     async def on_raw_message_edit(self, event: discord.RawMessageUpdateEvent) -> None:
         """
