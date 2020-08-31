@@ -134,4 +134,3 @@ if __name__ == '__main__':
             print(f", not '{result.mode}'")
     except KeyboardInterrupt:
         pass
-

@@ -52,23 +52,23 @@ class QueuedPool:
     """
     def __init__(self, start_port: int, end_port: int = None, loop: asyncio.AbstractEventLoop = None) -> None:
         """
-        initializes the QueuedPool and starts trying to process the queue
+        initializes the QueuedPool and starts trying to process the queue.
 
         the difference between start_port and end_port + 1 will be the size of the processing pool
         as that is the amount of ports freely availeble.
 
-        :param start_port: start of the port range
-        :param end_port: end of the port range
-        :param loop: asyncio event loop
+        :param start_port: start of the port range.
+        :param end_port: end of the port range.
+        :param loop: asyncio event loop.
 
-        :attr loop: asyncio event loop
-        :attr start_port: start of the port range
-        :attr end_port: end of the port range
-        :attr size: amount of ports availeble as well as the process pool size
-        :attr used_ports: ports currently in use by docker containers
-        :attr used_ids: ids (names) of the currently running docker containers
+        :attr loop: asyncio event loop.
+        :attr start_port: start of the port range.
+        :attr end_port: end of the port range.
+        :attr size: amount of ports availeble as well as the process pool size.
+        :attr used_ports: ports currently in use by docker containers.
+        :attr used_ids: ids (names) of the currently running docker containers.
         :attr queue: the queue waiting to get into the pending queue
-        :attr pending: currently run processes
+        :attr pending: currently run processes.
         """
         self.loop = loop
         self.start_port = start_port
@@ -86,7 +86,8 @@ class QueuedPool:
     @staticmethod
     async def pass_gil() -> None:
         """
-        forces the task to sleep and pass the GIL to next task
+        forces the task to sleep and pass the GIL to next task.
+
         :return: None
         """
         await asyncio.sleep(0.01)
@@ -97,7 +98,7 @@ class QueuedPool:
         starts a docker container with provided id and port.
 
         :param port: local port to expose to the container.
-        :param uuid: container id
+        :param uuid: container id.
         :return: None
         """
         success, stdout = await subprocess(
@@ -110,7 +111,7 @@ class QueuedPool:
         """
         stops a docker container with some id.
 
-        :param uuid: container id
+        :param uuid: container id.
         :return: None
         """
         success, stdout = await subprocess(
@@ -129,7 +130,7 @@ class QueuedPool:
         main way to schedule a process. the process (coroutine) should ultimately return a string.
 
         :param process: callable coroutine with partial args.
-        :return: result from the process
+        :return: result from the process.
         """
         future = self.loop.create_future()
         self.queue.append((future, process))
@@ -138,7 +139,7 @@ class QueuedPool:
 
     async def get_port(self) -> int:
         """
-        generates a free port for use
+        generates a free port for use.
 
         looks for a free port, if none availeble it waits for one to be free.
 
@@ -164,7 +165,7 @@ class QueuedPool:
 
     def get_id(self) -> str:
         """
-        generates a new free id for a container
+        generates a new free id for a container.
 
         :return: uuid
         """
@@ -207,8 +208,9 @@ class QueuedPool:
         once its done processing the result is set on the future objects so the process can continue in
         cleanup.
 
-        :param uuid: uuid for the docker container
-        :param port: port for the docker container
+        :param uuid: uuid for the docker container.
+        :param port: port for the docker container.
+
         :return: None
         """
         future, process = self.queue.pop(0)
@@ -270,9 +272,6 @@ class Client(Net):
         by authenticating the protocol the client sends the protocol to the server.
         and the server will compare and verify it. if the protocols match the process can go on.
 
-        if server denies verification NotImplementedByServer is raised to indicate the protocols are not the same.
-        if something else goes wrong on server side InternalServerError is raised.
-
         :param connection: the connection to the processing server.
 
         :return: None
@@ -290,9 +289,6 @@ class Client(Net):
         handles the sending of the source file.
 
         attempts to send the source file to the processing server.
-
-        :raises InternalServerError: if the server can communicate but something goes wrong on the other side.
-        :raises ConnectionError: if any sort of connection error occurs.
 
         :param connection: the connection to the processing server.
         :param source: source object with language and source code.
@@ -315,8 +311,6 @@ class Client(Net):
 
         awaits the server to respond with a message if message is a text message the
         source files produced stdout will be downloaded from the processing server.
-
-        if message is not a text message NotImplementedByClient is raised.
 
         :return: stdout from the processing server.
         """
@@ -374,8 +368,8 @@ class Client(Net):
         """
         the preferred way of sending a processing request to a server in a docker container.
 
-        :param source: source code to send
-        :return:
+        :param source: source code to send.
+        :return: the result from processing.
         """
         process = partial(self.process, source)
         return await self.pool.schedule_process(process)
