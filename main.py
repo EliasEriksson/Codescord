@@ -119,7 +119,8 @@ if __name__ == '__main__':
         "build-docker-image": build_docker_image,
     }
     mode_help = ", ".join(f"'{mode}'" for mode in modes.keys())
-    parser.add_argument("mode", type=str, nargs="?", default="client", help=mode_help)
+    parser.add_argument("mode", type=str, nargs="?", default="client",
+                        help=mode_help)
     parser.add_argument("-p", type=str, nargs="?", default="6090:6096",
                         help="port range for the application. 1 port=1 concurrent container.")
     result = parser.parse_args()
@@ -131,7 +132,6 @@ if __name__ == '__main__':
             print("mode must be ", end="")
             print(", ".join(f"'{mode}'" for mode in modes.keys()), end="")
             print(f", not '{result.mode}'")
-            quit()
     except KeyboardInterrupt:
         pass
 

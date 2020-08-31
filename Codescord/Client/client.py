@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Callable, Coroutine, Set
+from typing import Optional, List, Tuple, Callable, Awaitable, Set
 from ..Common.net import Net
 from ..Common.errors import Errors
 from ..Common.protocol import Protocol
@@ -39,22 +39,56 @@ def setup_socket() -> socket.socket:
 
 
 class QueuedPool:
-    def __init__(self, start_port: int, end_port: int = None, loop=None):
-        self.loop: asyncio.AbstractEventLoop = loop
+    """
+    a processing pool with first in first out queue to entry.
+
+    this functions as bottle neck depending on the amount of ports availeble for
+    this program specified with -p option when running main.py.
+
+    this pool will continuously look for processes that have been added to the internal queue
+    if there is a port availeble for a container to start the process it will be put in a pending state.
+    once the process is finished the port will be released and the process will be removed from its pending
+    state freeing up another spot for another process to be queued.
+    """
+    def __init__(self, start_port: int, end_port: int = None, loop: asyncio.AbstractEventLoop = None) -> None:
+        """
+        initializes the QueuedPool and starts trying to process the queue
+
+        the difference between start_port and end_port + 1 will be the size of the processing pool
+        as that is the amount of ports freely availeble.
+
+        :param start_port: start of the port range
+        :param end_port: end of the port range
+        :param loop: asyncio event loop
+
+        :attr loop: asyncio event loop
+        :attr start_port: start of the port range
+        :attr end_port: end of the port range
+        :attr size: amount of ports availeble as well as the process pool size
+        :attr used_ports: ports currently in use by docker containers
+        :attr used_ids: ids (names) of the currently running docker containers
+        :attr queue: the queue waiting to get into the pending queue
+        :attr pending: currently run processes
+        """
+        self.loop = loop
         self.start_port = start_port
         self.end_port = end_port if end_port else start_port
         self.size = self.end_port - self.start_port + 1
         assert self.start_port <= self.end_port
-        self.end_port = end_port
-        self.used_ports = set()
-        self.used_ids = set()
 
-        self.queue: List[Tuple[asyncio.Future, Callable[[], Coroutine]]] = []
+        self.used_ports: Set[int] = set()
+        self.used_ids: Set[str] = set()
+        self.queue: List[Tuple[asyncio.Future, Callable[[Tuple[str, int]], Awaitable[str]]]] = []
         self.pending: Set[asyncio.Task] = set()
+
         self.loop.create_task(self._process_queue())
 
     @staticmethod
-    async def next_task():
+    async def pass_gil() -> None:
+        """
+        forces the task to sleep and pass the GIL to next task
+        :return: None
+        """
         await asyncio.sleep(0.01)
 
     @staticmethod
@@ -72,11 +106,10 @@ class QueuedPool:
             raise Errors.ContainerStartupError(stdout)
 
     @staticmethod
-    async def stop_container(uuid: str, port: int) -> None:
+    async def stop_container(uuid: str) -> None:
         """
         stops a docker container with some id.
 
-        :param port:
         :param uuid: container id
         :return: None
         """
@@ -88,25 +121,36 @@ class QueuedPool:
         success, stdout = await subprocess(
             f"sudo docker rm {uuid}")
 
-        print(f"successfully removed container running on port {port}")
-
         if not success:
             raise Errors.ContainerRmError(stdout)
 
-    async def schedule_process(self, process: Callable[[], Coroutine]):
+    async def schedule_process(self, process: Callable[[Tuple[str, int]], Awaitable[str]]) -> str:
+        """
+        main way to schedule a process. the process (coroutine) should ultimately return a string.
+
+        :param process: callable coroutine with partial args.
+        :return: result from the process
+        """
         future = self.loop.create_future()
         self.queue.append((future, process))
         await future
         return future.result()
 
     async def get_port(self) -> int:
+        """
+        generates a free port for use
+
+        looks for a free port, if none availeble it waits for one to be free.
+
+        :return: port
+        """
         if self.end_port:
             while True:
                 for port in range(self.start_port, self.end_port + 1):
                     if port not in self.used_ports:
                         self.used_ports.add(port)
                         return port
-                await self.next_task()
+                await self.pass_gil()
         else:
             port = self.start_port
             while True:
@@ -114,11 +158,16 @@ class QueuedPool:
                     self.used_ports.add(port)
                     return port
                 port += 1
-                if port > 65535:
+                if port > 0xFFFF:  # 65535 in hex, maximum amount of ports available
                     port = self.start_port
-                await self.next_task()
+                await self.pass_gil()
 
     def get_id(self) -> str:
+        """
+        generates a new free id for a container
+
+        :return: uuid
+        """
         while True:
             uuid = str(uuid4())
             if uuid not in self.used_ids:
@@ -126,33 +175,68 @@ class QueuedPool:
                 return uuid
 
     async def _process_queue(self) -> None:
+        """
+        a forever running loop to put queued items up for execution once there is space in the queue.
+
+        this loop is called in the init method
+
+        if there is a spot in the processing queue self.pending and there are processes queued
+        in self.queue an id and port is generated for a new process followed by execution of the process.
+        when the process is done some cleanup is done to free resources.
+
+        if there are no processes to add to the queue the gil will be passed onto some other task by sleeping here.
+
+        :return: None
+        """
         while True:
             if len(self.pending) < self.size:
                 if self.queue:
                     uuid = self.get_id()
                     port = await self.get_port()
-                    print(f"launching process on port {port}")
-                    task = asyncio.create_task(self.process(uuid, port))
-                    asyncio.create_task(self.cleanup(uuid, port, task))
-                    # task.add_done_callback(partial(self.cleanup, uuid, port, task))
-                    self.pending.add(task)
-            await self.next_task()
+                    process = asyncio.create_task(self.process(uuid, port))
+                    asyncio.create_task(self.cleanup(uuid, port, process))
+                    self.pending.add(process)
+            await self.pass_gil()
 
-    async def process(self, uuid: str, port: int):
+    async def process(self, uuid: str, port: int) -> None:
+        """
+        pops off the next process from the waiting queue to start processing.
+
+        starts the docker container with given uuid and port and starts the process
+        of connecting to the server inside. waits for a little bit to let the container start.
+        once its done processing the result is set on the future objects so the process can continue in
+        cleanup.
+
+        :param uuid: uuid for the docker container
+        :param port: port for the docker container
+        :return: None
+        """
         future, process = self.queue.pop(0)
         await self.start_container(uuid, port)
-        await asyncio.sleep(0.5)  # wait a little for the container to start
+        await asyncio.sleep(0.45)  # wait a little for the container to start
         result = await process(("localhost", port))
 
         future.set_result(result)
 
-    async def cleanup(self, uuid: str, port: int, task: asyncio.Task) -> None:
-        await task
-        freeing_port = asyncio.create_task(self.stop_container(uuid, port))
+    async def cleanup(self, uuid: str, port: int, process: asyncio.Task) -> None:
+        """
+        cleans up resource usage from the task whenever its done running.
+
+        waits for the process to finish as well as
+        the docker container to close before freeing the uuid, port for further use as well as
+        freeing a spot in the process pool of pending processes
+
+        :param uuid: container uuid
+        :param port: port that is/was used by the container
+        :param process: the process connecting into the docker container
+        :return: None
+        """
+        await process
+        freeing_port = asyncio.create_task(self.stop_container(uuid))
         await freeing_port
         self.used_ids.remove(uuid)
         self.used_ports.remove(port)
-        self.pending.remove(task)
+        self.pending.remove(process)
 
 
 class Client(Net):
@@ -168,16 +252,16 @@ class Client(Net):
     receive the stdout from the server
     and then close the connection.
     """
-    def __init__(self, start_port: int, end_port: Optional[int], loop=None) -> None:
-        super(Client, self).__init__(loop)
-        self.start_port = start_port
-        self.end_port = end_port if end_port else start_port
-        assert self.start_port <= self.end_port
-        self.retries = 5
-        self.used_ports = set()
-        self.used_ids = set()
+    def __init__(self, start_port: int, end_port: Optional[int], loop: asyncio.AbstractEventLoop = None) -> None:
+        """
 
+        :param start_port: start of the port range
+        :param end_port: end of the port range
+        :param loop: asyncio event loop
+        """
+        super(Client, self).__init__(loop)
         self.pool = QueuedPool(start_port, end_port, loop)
+        self.retries = 5
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
@@ -287,12 +371,20 @@ class Client(Net):
             connection.close()
 
     async def schedule_process(self, source: Source) -> str:
+        """
+        the preferred way of sending a processing request to a server in a docker container.
+
+        :param source: source code to send
+        :return:
+        """
         process = partial(self.process, source)
         return await self.pool.schedule_process(process)
 
     async def process(self, source: Source, address: Tuple[str, int], attempts=0) -> str:
         """
         processes a source object on the processing server.
+
+        can, but should not be called outside of schedule_process as it sets everything automatically
 
         starts the process of sending over the source object to the server to process
         and receiving the result back from stdout.
@@ -328,6 +420,3 @@ class Client(Net):
                 await asyncio.sleep(0.5)
                 return await self.process(source, address, attempts + 1)
             return f"Processing server down. Please try again later."
-
-
-
