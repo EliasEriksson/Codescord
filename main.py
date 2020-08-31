@@ -52,7 +52,7 @@ async def init_tortoise() -> None:
         modules={"models": ["Discord.models"]})
 
 
-def build_docker_image():
+def build_docker_image(_: argparse.Namespace):
     process("sudo docker build --tag codescord .", False)
 
 
@@ -69,7 +69,7 @@ async def _create_database() -> None:
     await Tortoise.generate_schemas()
 
 
-def create_database() -> None:
+def create_database(_: argparse.Namespace) -> None:
     """
     sets up and creates the database for the Discord.Client.
 
@@ -78,7 +78,7 @@ def create_database() -> None:
     run_async(_create_database())
 
 
-def run_client() -> None:
+def run_client(args: argparse.Namespace) -> None:
     """
     starts the Discord.Client.
 
@@ -88,7 +88,8 @@ def run_client() -> None:
     try:
         loop.run_until_complete(init_tortoise())
         token = os.environ.get("DISCORD_CODESCORD")
-        client = Discord.Client(loop=loop)
+        start_port, end_port = args.p.split(":")
+        client = Discord.Client(start_port=int(start_port), end_port=int(end_port), loop=loop)
         loop.run_until_complete(client.start(token))
     finally:
         loop.run_until_complete(Tortoise.close_connections())
@@ -97,7 +98,7 @@ def run_client() -> None:
         print("closed containers.")
 
 
-def run_server() -> None:
+def run_server(_: argparse.Namespace) -> None:
     """
     starts the Codescord.Server.
 
@@ -118,17 +119,18 @@ if __name__ == '__main__':
         "build-docker-image": build_docker_image,
     }
     mode_help = ", ".join(f"'{mode}'" for mode in modes.keys())
-    parser.add_argument("mode", type=str, default="client", help=mode_help)
+    parser.add_argument("mode", type=str, nargs="?", default="client",
+                        help=mode_help)
+    parser.add_argument("-p", type=str, nargs="?", default="6090:6096",
+                        help="port range for the application. 1 port=1 concurrent container.")
     result = parser.parse_args()
 
     try:
         if result.mode in modes:
-            modes[result.mode]()
+            modes[result.mode](result)
         else:
             print("mode must be ", end="")
             print(", ".join(f"'{mode}'" for mode in modes.keys()), end="")
             print(f", not '{result.mode}'")
-            quit()
     except KeyboardInterrupt:
         pass
-

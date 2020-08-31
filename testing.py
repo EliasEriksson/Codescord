@@ -1,9 +1,28 @@
-stdout = """CONTAINER ID        IMAGE               COMMAND                  CREATED              STATUS                       PORTS                    NAMES
-6aa6c2b8c0cb        codescord           "python main.py serv…"   About a minute ago   Exited (137) 6 seconds ago                            manual2
-a147ec32f587        codescord           "python main.py serv…"   2 minutes ago        Up 2 minutes                 0.0.0.0:6090->6090/tcp   manual"""
+import asyncio
+from functools import partial
 
-for line in stdout.split("\n"):
-    if "codescord" in line:
-        name = line.split()[-1]
-        print(name)
 
+m = []
+
+
+async def work(future: asyncio.Future, i):
+    print("started to work")
+    await asyncio.sleep(0.5)
+    print("done working")
+    future.set_result(i)
+
+
+async def main(loop):
+    for i in range(4):
+        future = loop.create_future()
+        m.append((future, partial(work, future, i)))
+    await m[2][0]
+    # await asyncio.sleep(5)
+
+
+
+
+
+if __name__ == '__main__':
+    lp = asyncio.get_event_loop()
+    lp.run_until_complete(main(lp))

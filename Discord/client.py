@@ -2,10 +2,8 @@ from typing import *
 import discord
 import Codescord
 import re
-from uuid import uuid4
 from .models import ResponseMessages
 import asyncio
-from .errors import Errors
 import tortoise
 
 
@@ -33,23 +31,6 @@ async def send(stdout: str, channel: discord.TextChannel, description: str = Non
     """
     description = description if description else ""
     return await channel.send(f"{description}\n```{stdout}```")
-
-
-async def subprocess(stdin: str) -> Tuple[bool, str]:
-    """
-    easier wrapper around asyncio.create_subprocess_exec
-
-    :param stdin: command to execute in subprocess
-    :return: result from subprocess
-    """
-    process = await asyncio.create_subprocess_exec(
-        *stdin.split(" "), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout, stderr = await process.communicate()
-    if not stdout:
-        print(f"failed with '{stdin}'")
-        return False, stderr.decode("utf-8")
-    print(f"succeeded with '{stdin}'")
-    return True, stdout.decode("utf-8")
 
 
 class Message:
@@ -91,10 +72,9 @@ class Client(discord.Client):
     if it did reply to that message it will attempt to execute potential source.
     if it never replied to the edited message it will NEVER scan the message for source not execute it even if it did.
     """
-    def __init__(self, loop=None, initial_port: int = 6090) -> None:
+    def __init__(self, start_port: int = 6090, end_port: int = None, loop=None,) -> None:
         """
         :param loop: asyncio event loop
-        :param initial_port: first port to open to a docker container. (will increment by 1 for each active container.)
 
         :attr loop: the asyncio event loop.
         :attr codescord_client: the client that is responsible for network traffic to the docker container.
@@ -105,70 +85,10 @@ class Client(discord.Client):
         """
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
-        self.codescord_client = Codescord.Client(self.loop)
-        self.initial_port = initial_port
+        self.codescord_client = Codescord.Client(start_port, end_port, loop)
         self.code_pattern = re.compile(r"```([\w+]+)\n([^=`]+)```", re.DOTALL)
         self.used_ports = set()
         self.used_ids = set()
-
-    @staticmethod
-    async def start_container(port: int, uuid: str) -> None:
-        """
-        starts a docker container with provided id and port.
-
-        :param port: local port to expose to the container.
-        :param uuid: container id
-        :return: None
-        """
-        success, stdout = await subprocess(
-            f"sudo docker run -d -p {port}:{6090} --name {uuid} codescord")
-        if not success:
-            raise Errors.ContainerStartupError(stdout)
-
-    @staticmethod
-    async def stop_container(uuid: str) -> None:
-        """
-        stops a docker container with some id.
-
-        :param uuid: container id
-        :return: None
-        """
-        success, stdout = await subprocess(
-            f"sudo docker stop {uuid}")
-        if not success:
-            raise Errors.ContainerStopError(stdout)
-
-        success, stdout = await subprocess(
-            f"sudo docker rm {uuid}")
-
-        if not success:
-            raise Errors.ContainerRmError(stdout)
-
-    def get_uuid(self) -> str:
-        """
-        generates a container id from uuid4 and adds it to self.used_ids
-
-        this while loop will pretty much never run more than once
-
-        :return: id for the docker container
-        """
-        while (uuid := str(uuid4())) in self.used_ids:
-            pass
-        self.used_ids.add(uuid)
-        return uuid
-
-    def get_next_port(self) -> int:
-        """
-        gets the next free port in line starting from self.initial_port.
-
-        :return: container port.
-        """
-        port = self.initial_port
-        while True:
-            if port not in self.used_ports:
-                self.used_ports.add(port)
-                return port
-            port += 1
 
     async def process(self, message: Union[Message, discord.Message]) -> str:
         """
@@ -192,19 +112,10 @@ class Client(discord.Client):
         if message.author != self.user:
             if match := self.code_pattern.search(message.content):
                 source = Codescord.Source(*match.groups())
-                port = self.get_next_port()
-                uuid = self.get_uuid()
-                try:
-                    await self.start_container(port, uuid)
 
-                    stdout = await self.codescord_client.process(source, ("localhost", port))
+                stdout = await self.codescord_client.schedule_process(source)
 
-                    asyncio.create_task(self.stop_container(uuid))
-
-                    return stdout
-                finally:
-                    self.used_ports.remove(port)
-                    self.used_ids.remove(uuid)
+                return stdout
 
     async def on_raw_message_edit(self, event: discord.RawMessageUpdateEvent) -> None:
         """
