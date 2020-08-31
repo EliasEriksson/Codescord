@@ -1,7 +1,7 @@
 from ..Common.net import Net
 from ..Common.errors import Errors
 from ..Common.protocol import Protocol
-from ..Common.languages import get_language_map
+from ..Common.languages import Languages, get_language_map
 import socket
 import asyncio
 from pathlib import Path
@@ -50,6 +50,10 @@ class Server(Net):
         }
 
         self.languages = get_language_map()
+        self.languages.update({
+            "py": Languages.python,
+            "c++": Languages.cpp,
+        })
 
     async def authenticate(self, connection: socket.socket) -> None:
         """
