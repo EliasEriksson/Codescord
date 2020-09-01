@@ -10,6 +10,18 @@ async def subprocess(stdin: str) -> asyncio.subprocess.Process:
 
 class Languages:
     @staticmethod
+    async def php(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"php -f {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
+    async def java(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"java {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
     async def javascript(file: Union[Path, str]) -> bytes:
         process = await subprocess(f"node {file}")
         stdout, stderr = await process.communicate()
@@ -54,7 +66,7 @@ class Languages:
         return stdout
 
 
-def get_language_map() -> Dict[str, Callable[[Union[Path, str]], bytes]]:
+def get_language_map():
     return {method_name: getattr(Languages, method_name)
             for method_name in dir(Languages)
             if not method_name.startswith("__")}
