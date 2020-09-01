@@ -66,7 +66,7 @@ class Languages:
         return stdout
 
 
-def get_language_map():
+def get_language_map() -> Dict[str, Callable]:
     return {method_name: getattr(Languages, method_name)
             for method_name in dir(Languages)
             if not method_name.startswith("__")}
