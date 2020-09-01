@@ -10,8 +10,14 @@ async def subprocess(stdin: str) -> asyncio.subprocess.Process:
 
 class Languages:
     @staticmethod
-    async def javascript(file: Union[Path, str]):
+    async def javascript(file: Union[Path, str]) -> bytes:
         process = await subprocess(f"node {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
+    async def go(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"go run {file}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
@@ -48,7 +54,7 @@ class Languages:
         return stdout
 
 
-def get_language_map() -> Dict[str, Callable]:
+def get_language_map() -> Dict[str, Callable[[Union[Path, str]], bytes]]:
     return {method_name: getattr(Languages, method_name)
             for method_name in dir(Languages)
             if not method_name.startswith("__")}
