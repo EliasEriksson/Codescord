@@ -53,6 +53,7 @@ class Server(Net):
         self.languages.update({
             "py": Languages.python,
             "c++": Languages.cpp,
+            "js": Languages.javascript,
         })
 
     async def authenticate(self, connection: socket.socket) -> None:
