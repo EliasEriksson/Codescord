@@ -8,6 +8,9 @@ discord [invite link](https://discord.com/api/oauth2/authorize?client_id=7492737
 * cpp / c++
 * C
 * javascript / js (node.js)
+* go
+* Java
+* php (cli does not give you files back currently)
 
 more languages can easily be added by adding a procedure for the language in `Codescord.Common.languages.Languages`
 , pointing to that procedure in `Codescord.Server.server.Server.languages` (in its init)

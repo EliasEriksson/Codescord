@@ -10,8 +10,26 @@ async def subprocess(stdin: str) -> asyncio.subprocess.Process:
 
 class Languages:
     @staticmethod
-    async def javascript(file: Union[Path, str]):
+    async def php(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"php -f {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
+    async def java(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"java {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
+    async def javascript(file: Union[Path, str]) -> bytes:
         process = await subprocess(f"node {file}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
+    async def go(file: Union[Path, str]) -> bytes:
+        process = await subprocess(f"go run {file}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
