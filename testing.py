@@ -1,28 +1,25 @@
-import asyncio
-from functools import partial
+import re
 
+text = """hahahahaha this si my first box
+```py
+import urllib2
+try:
+  urllib2.urlopen("https://google.com", timeout=1)
+  print("internet on")
+except:
+  print("internet off")
+```
 
-m = []
+hihihi this is my second box
+```py
+a = "asd"
+```
+asdasdasda
+```
+asd
+```"""
 
-
-async def work(future: asyncio.Future, i):
-    print("started to work")
-    await asyncio.sleep(0.5)
-    print("done working")
-    future.set_result(i)
-
-
-async def main(loop):
-    for i in range(4):
-        future = loop.create_future()
-        m.append((future, partial(work, future, i)))
-    await m[2][0]
-    # await asyncio.sleep(5)
-
-
-
-
-
-if __name__ == '__main__':
-    lp = asyncio.get_event_loop()
-    lp.run_until_complete(main(lp))
+pattern = re.compile(r"`{3}(\w+)\n((?:(?!`{3}).)+)```", re.DOTALL)
+if match := pattern.findall(text):
+    for stuff in match:
+        asd, qwe = stuff
