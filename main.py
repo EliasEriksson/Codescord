@@ -8,7 +8,6 @@ import os
 import argparse
 from pathlib import Path
 import subprocess
-import json
 
 
 def process(stdin: str, capture_output=True) -> Optional[str]:
@@ -88,9 +87,7 @@ def run_client(args: argparse.Namespace) -> None:
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(init_tortoise())
-        with open("token_name.json") as f:
-            token_env_name: str = json.load(f)
-        token = os.environ.get(token_env_name)
+        token = os.environ.get("DISCORD_CODESCORD")
         start_port, end_port = args.p.split(":")
         client = Discord.Client(start_port=int(start_port), end_port=int(end_port), loop=loop)
         loop.run_until_complete(client.start(token))
