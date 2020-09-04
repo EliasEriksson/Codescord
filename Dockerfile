@@ -29,8 +29,10 @@ WORKDIR /Codescord
 COPY Codescord /Codescord/Codescord
 COPY Discord /Codescord/Discord
 COPY requirements.txt /Codescord/requirements.txt
+COPY process.requirements.txt /Codescord/process.requirements.txt
 COPY main.py /Codescord/main.py
 
 RUN python -m pip install -r /Codescord/requirements.txt
+RUN python -m pip install -r /Codescord/process.requirements.txt
 
 CMD ["python", "main.py", "server"]

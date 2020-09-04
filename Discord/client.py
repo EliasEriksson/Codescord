@@ -7,32 +7,6 @@ import asyncio
 import tortoise
 
 
-async def edit(stdout: str, message: discord.Message, description: str = None) -> None:
-    """
-    wrapper for discord.Message.edit()
-
-    :param stdout: execution result from executing code
-    :param message: message to edit
-    :param description: message above the execution result
-    :return:
-    """
-    description = description if description else ""
-    await message.edit(content=f"{description}\n```{stdout}```")
-
-
-async def send(stdout: str, channel: discord.TextChannel, description: str = None) -> discord.Message:
-    """
-    wrapper for discord.TextChannel.send()
-
-    :param stdout: execution result from executing code
-    :param channel: channel to send message in
-    :param description: message above the execution result
-    :return:
-    """
-    description = description if description else ""
-    return await channel.send(f"{description}\n```{stdout}```")
-
-
 class Message:
     """
     mimics a discord.Message object (adapter?)
@@ -44,7 +18,6 @@ class Message:
     """
     def __init__(self, message_id: int, author: discord.User, content: str, guild: discord.Guild, channel: discord.TextChannel) -> None:
         """
-
         :attr id: the edited message id
         :attr author: the author of the message
         :attr content: the content of the message
@@ -86,11 +59,12 @@ class Client(discord.Client):
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
         self.codescord_client = Codescord.Client(start_port, end_port, loop)
-        self.code_pattern = re.compile(r"```([\w+]+)\n([^=`]+)```", re.DOTALL)
-        self.used_ports = set()
-        self.used_ids = set()
+        self.code_pattern = re.compile(r"`{3}(\w+)\n((?:(?!`{3}).)+)```", re.DOTALL)
+        ""
+        self.used_ports: Set[int] = set()
+        self.used_ids: Set[str] = set()
 
-    async def process(self, message: Union[Message, discord.Message]) -> str:
+    async def process(self, message: Union[Message, discord.Message]) -> List[str]:
         """
         scans the discord message for highlighted a highlighted code block to attempt execution.
 
@@ -110,12 +84,14 @@ class Client(discord.Client):
         :return: execution result (stdout)
         """
         if message.author != self.user:
-            if match := self.code_pattern.search(message.content):
-                source = Codescord.Source(*match.groups())
+            if match := self.code_pattern.findall(message.content):
+                tasks: List[asyncio.Task] = [
+                    asyncio.create_task(self.codescord_client.schedule_process(Codescord.Source(language, code)))
+                    for language, code in match
+                ]
+                results: List[str] = [f"```{await task}```" for task in tasks]
 
-                stdout = await self.codescord_client.schedule_process(source)
-
-                return stdout
+                return results
 
     async def on_raw_message_edit(self, event: discord.RawMessageUpdateEvent) -> None:
         """
@@ -144,8 +120,9 @@ class Client(discord.Client):
             response_message: discord.Message = await message.channel.fetch_message(
                 db_response_message.message_id)
 
-            if stdout := (await self.process(message)):
-                await edit(stdout, response_message)
+            if results := (await self.process(message)):
+                edit = "\n".join(results)
+                await response_message.edit(content=edit)
         except tortoise.exceptions.DoesNotExist:
             pass
 
@@ -160,8 +137,8 @@ class Client(discord.Client):
         :param message: discord message sent by some user.
         :return: None
         """
-        if stdout := (await self.process(message)):
-            response = await send(stdout, message.channel)
+        if results := (await self.process(message)):
+            response: discord.Message = await message.channel.send(f'{chr(10).join(results)}')
             response_message = await ResponseMessages.create_message(
                 server_id=message.guild.id,
                 channel_id=message.channel.id,
