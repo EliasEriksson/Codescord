@@ -2,7 +2,7 @@ from typing import *
 import discord
 import Codescord
 import re
-from .models import ResponseMessages
+from .models import ResponseMessages, Servers
 import asyncio
 import tortoise
 
@@ -59,7 +59,7 @@ class Client(discord.Client):
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
         self.codescord_client = Codescord.Client(start_port, end_port, loop)
-        self.code_pattern = re.compile(r"(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
+        self.code_pattern = re.compile(r"/run\s([^\n]*)\s*(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
         self.used_ports: Set[int] = set()
         self.used_ids: Set[str] = set()
 
@@ -84,12 +84,18 @@ class Client(discord.Client):
         """
         if message.author != self.user:
             if match := self.code_pattern.findall(message.content):
-                tasks: List[asyncio.Task] = [
-                    asyncio.create_task(self.codescord_client.schedule_process(Codescord.Source(language, code)))
-                    for language, code in match
+                sources: List[Codescord.Source] = [
+                    Codescord.Source(language, code, sys_args)
+                    for sys_args, language, code in match
                 ]
-                results: List[str] = [f"```{await task}```" for task in tasks]
-
+                source_process_task: List[asyncio.Task] = [
+                    asyncio.create_task(self.codescord_client.schedule_process(source))
+                    for source in sources
+                ]
+                results: List[str] = [
+                    f"{'`' * 3}{await task}{'`' * 3}"
+                    for task in source_process_task
+                ]
                 return results
 
     async def on_raw_message_edit(self, event: discord.RawMessageUpdateEvent) -> None:
@@ -136,7 +142,14 @@ class Client(discord.Client):
         :param message: discord message sent by some user.
         :return: None
         """
+        guild: discord.Guild = await self.fetch_guild(289124717619838976)
+        async for entry in guild.audit_logs(action=discord.AuditLogAction.bot_add):
+            if entry.target == self.user:
+                pass
+
+
         if results := (await self.process(message)):
+            #                            using chr(10) for \n as \ is not allowed in f-string
             response: discord.Message = await message.channel.send(f'{chr(10).join(results)}')
             response_message = await ResponseMessages.create_message(
                 server_id=message.guild.id,
@@ -145,6 +158,16 @@ class Client(discord.Client):
                 message_id=response.id)
             await response_message.save()
 
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        await Servers.create_server(guild.id)
+        async for entry in guild.audit_logs(action=discord.AuditLogAction.bot_add):
+            if entry.target == self.user:
+                user: discord.User = entry.user
+                await user.send("Thank you for")
+
+                print(entry.user)
+
     @staticmethod
     async def on_ready():
         print("online.")
+
