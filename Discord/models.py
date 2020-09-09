@@ -9,14 +9,25 @@ class Servers(Model):
     server_id = fields.IntField()
     auto_run = fields.BooleanField(default=False)
 
+    # @classmethod
+    # async def get(cls, server_id: int) -> "Servers":
+    #     return await super(Servers, cls).get(
+    #         server_id=server_id
+    #     )
+    @classmethod
+    async def get_server(cls, server_id: int) -> "Servers":
+        return await cls.get(
+            server_id=server_id
+        )
+
     @classmethod
     async def create_server(cls, server_id: int, auto_run: bool = None) -> Model:
         try:
-            server = await cls.get(
+            server = await super(Servers, cls).get(
                 server_id=server_id
             )
         except tortoise.exceptions.DoesNotExist:
-            server = await cls.create(
+            server = await super(Servers, cls).create(
                 server_id=server_id,
                 auto_run=True if auto_run else False
             )

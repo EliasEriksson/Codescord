@@ -3,6 +3,7 @@ import discord
 import Codescord
 import re
 from .models import ResponseMessages, Servers
+from .message_parser import parse
 import asyncio
 import tortoise
 
@@ -59,11 +60,51 @@ class Client(discord.Client):
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
         self.codescord_client = Codescord.Client(start_port, end_port, loop)
-        self.code_pattern = re.compile(r"/run\s([^\n]*)\s*(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
+        self.manual_pattern = re.compile(r"/run\s*([^\n]*)\s*(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
+        self.auto_pattern = re.compile(r"(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
         self.used_ports: Set[int] = set()
         self.used_ids: Set[str] = set()
 
-    async def process(self, message: Union[Message, discord.Message]) -> List[str]:
+    async def process_commands(self, message: Union[Message, discord.Message]) -> bool:
+        if message.author != self.user:
+            if message.content.startswith("/codescord"):
+                result, error = parse(message.content)
+                if error:
+                    mes = "\n".join([
+                        f"{'`' * 3}{part}{'`' * 3}"
+                        for part in result
+                    ])
+                    await message.channel.send(mes)
+                    return True
+                elif vars(result):
+                    guild = await Servers.get_server(server_id=message.guild.id)
+                    await guild.update_from_dict({
+                        result.option: result.value
+                    }).save()
+                    await message.channel.send(
+                        f"{result.option.replace('_', '-')} is now {result.value} for this server."
+                    )
+                    return True
+        return False
+
+    async def manual_process(self, message: Union[Message, discord.Message]):
+        if message.author != self.user:
+            if match := self.manual_pattern.findall(message.content):
+                sources: List[Codescord.Source] = [
+                    Codescord.Source(language, code, sys_args)
+                    for sys_args, language, code in match
+                ]
+                source_process_tasks: List[asyncio.Task] = [
+                    asyncio.create_task(self.codescord_client.schedule_process(source))
+                    for source in sources
+                ]
+                results: List[str] = [
+                    f"{'`' * 3}{await task}{'`' * 3}"
+                    for task in source_process_tasks
+                ]
+                return results
+
+    async def auto_process(self, message: Union[Message, discord.Message]) -> List[str]:
         """
         scans the discord message for highlighted a highlighted code block to attempt execution.
 
@@ -83,10 +124,10 @@ class Client(discord.Client):
         :return: execution result (stdout)
         """
         if message.author != self.user:
-            if match := self.code_pattern.findall(message.content):
+            if match := self.auto_pattern.findall(message.content):
                 sources: List[Codescord.Source] = [
-                    Codescord.Source(language, code, sys_args)
-                    for sys_args, language, code in match
+                    Codescord.Source(language, code)
+                    for language, code in match
                 ]
                 source_process_task: List[asyncio.Task] = [
                     asyncio.create_task(self.codescord_client.schedule_process(source))
@@ -125,7 +166,7 @@ class Client(discord.Client):
             response_message: discord.Message = await message.channel.fetch_message(
                 db_response_message.message_id)
 
-            if results := (await self.process(message)):
+            if results := (await self.auto_process(message)):
                 edit = "\n".join(results)
                 await response_message.edit(content=edit)
         except tortoise.exceptions.DoesNotExist:
@@ -142,32 +183,40 @@ class Client(discord.Client):
         :param message: discord message sent by some user.
         :return: None
         """
-        guild: discord.Guild = await self.fetch_guild(289124717619838976)
-        async for entry in guild.audit_logs(action=discord.AuditLogAction.bot_add):
-            if entry.target == self.user:
-                pass
-
-
-        if results := (await self.process(message)):
+        if await self.process_commands(message):
+            pass
+        elif results := (await self.manual_process(message)):
             #                            using chr(10) for \n as \ is not allowed in f-string
-            response: discord.Message = await message.channel.send(f'{chr(10).join(results)}')
+            response: discord.Message = await message.channel.send(f"{chr(10).join(results)}")
             response_message = await ResponseMessages.create_message(
                 server_id=message.guild.id,
                 channel_id=message.channel.id,
                 user_message_id=message.id,
                 message_id=response.id)
             await response_message.save()
+        elif not results:
+            guild = await Servers.get_server(server_id=message.guild.id)
+            if guild.auto_run:
+                if results := (await self.auto_process(message)):
+                    #                            using chr(10) for \n as \ is not allowed in f-string
+                    response: discord.Message = await message.channel.send(f'{chr(10).join(results)}')
+                    response_message = await ResponseMessages.create_message(
+                        server_id=message.guild.id,
+                        channel_id=message.channel.id,
+                        user_message_id=message.id,
+                        message_id=response.id)
+                    await response_message.save()
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await Servers.create_server(guild.id)
         async for entry in guild.audit_logs(action=discord.AuditLogAction.bot_add):
             if entry.target == self.user:
                 user: discord.User = entry.user
-                await user.send("Thank you for")
-
+                await user.send("Thank you for using me on your server.")
                 print(entry.user)
 
-    @staticmethod
-    async def on_ready():
+    async def on_ready(self):
+        for guild in self.guilds:
+            await Servers.create_server(guild.id)
         print("online.")
 
