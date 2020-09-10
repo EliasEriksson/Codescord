@@ -18,28 +18,47 @@ and update the docker image to contain the runtime/compilers necessary. \
 PRs are welcome :)
 
 #### Usage
-Simply send a discord message with a highlighted code block.\
-example, raw message: \
+There are two ways to execute highlighted code blocks. This is a setting and can be changed
+ with `/codescord auto-run on`
+##### Manual run (default)
+If disabled it can be re-enabled with `/codescord auto-run off`
+To execute a highlighted code block in this setting simply use:\
+/run\```py\
+print("hello world")\
+\```
+
+##### Automatic run
+To enable this feature run: `/codescord auto-run on` in one of your servers 
+text channels the bot can read. When it is enabled 
+simply send a discord message with a highlighted code block.
+###### Raw text
 My code is so cool!\
 \```python\
 print("hello world!")\
 \```
 
-what your message looks like in discord:
+#### Examples
+###### Raw text
+My code is so cool! \
+/run\```py \
+print("hello world") \
+\```
 
-My code is so cool!
+###### Discord formatted message
+My code is so cool! \
+/run
 ```python
 print("hello world!")
 ```
 
-and the bot will respond with a code block
+###### Bot response
 
 ```
 hello world!
 ```
 
 the first text after the tipple \``` is what determines how the code will be run on the server side.
-\```python for python \```c++ for c++. OBS! a new line after the language name is required. see example above.
+\```python for python \```c++ for c++. OBS! a new line after the language name is required. see examples above.
 
 ## If you want to self host
 #### Requirements

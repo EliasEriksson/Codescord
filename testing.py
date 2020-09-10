@@ -1,25 +1,23 @@
-import re
-
-text = """hahahahaha this si my first box
+"""
+/run
 ```py
-import urllib2
-try:
-  urllib2.urlopen("https://google.com", timeout=1)
-  print("internet on")
-except:
-  print("internet off")
-```
+import sys
 
-hihihi this is my second box
-```py
-a = "asd"
+print(f"given sys args: {sys.argv}")
 ```
-asdasdasda
-```
-asd
-```"""
+"""
 
-pattern = re.compile(r"`{3}(\w+)\n((?:(?!`{3}).)+)```", re.DOTALL)
-if match := pattern.findall(text):
-    for stuff in match:
-        asd, qwe = stuff
+import argparse
+import sys
+
+
+# print(result if vars(result) else parser.format_help())
+
+# options = parser.add_subparsers()
+#
+# auto_run = options.add_parser("auto-run")
+# auto_run.add_argument("state", type=str, nargs="?", default="off")
+#
+# result = parser.parse_args(["auto-run"])
+#
+# print(result)
