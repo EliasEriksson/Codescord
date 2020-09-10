@@ -7,16 +7,37 @@ class ParseError(Exception):
 
 
 class ArgumentParser(argparse.ArgumentParser):
+    """
+    subclass of ArgumentParser is required for the argument parser to not sys exit
+    on an error.
+    """
     def error(self, message):
+        """
+        stores the crashed parsers formatted help text and the error message in ParseError.
+
+        :param message:
+        :return:
+        """
         raise ParseError(self.format_help(), f": error: {message}")
 
 
-def state_validator(value):
+def bool_validator(value):
+    """
+    changes a string on/off to true/false
+
+    if not on/off is given raise error
+
+    :param value: given value from command line
+    :return:
+    """
     if value not in ("on", "off"):
         raise argparse.ArgumentTypeError(f"state must be 'on' or 'off' not '{value}'")
     return True if value == "on" else False
 
 
+"""
+parser setup
+"""
 parser = ArgumentParser(prog="")
 codescord_sub_parser = parser.add_subparsers()
 codescord_parser = codescord_sub_parser.add_parser("/codescord")
@@ -30,12 +51,23 @@ auto_run = options_sub_parser.add_parser(
     help=": option for codescord."
 )
 auto_run.add_argument(
-    "value", type=state_validator,
+    "value", type=bool_validator,
     help="on/off if you want to auto run highlighted code blocks."
 )
 
 
 def parse(message: str) -> Tuple[Union[argparse.Namespace, Tuple[str, ...]], bool]:
+    """
+    parses a string for command line use
+
+    use the tuples second value to determine if the parse was successful or not
+
+    if the returned tuples second value is false the first will be a string
+    if the returned tuples second value is true the first will be a argparse.Namespace
+
+    :param message: command line string
+    :return: tuple with message and boolean if it errored
+    """
     try:
         results = parser.parse_args(message.lower().split())
         for key in dir(results):
