@@ -114,8 +114,9 @@ class Client(discord.Client):
                     for source in sources
                 ]
                 results: List[str] = [
-                    f"{'`' * 3}{await task}{'`' * 3}"
+                    f"{'`' * 3}\n{stdout}\n{'`' * 3}"
                     for task in source_process_tasks
+                    if (stdout := await task)
                 ]
                 return results
 
@@ -149,8 +150,9 @@ class Client(discord.Client):
                     for source in sources
                 ]
                 results: List[str] = [
-                    f"{'`' * 3}{await task}{'`' * 3}"
+                    f"{'`' * 3}\n{stdout}\n{'`' * 3}"
                     for task in source_process_task
+                    if (stdout := await task)
                 ]
                 return results
 
@@ -181,9 +183,14 @@ class Client(discord.Client):
             response_message: discord.Message = await message.channel.fetch_message(
                 db_response_message.message_id)
 
-            if results := (await self.auto_process(message)):
+            if results := (await self.manual_process(message)):
                 edit = "\n".join(results)
                 await response_message.edit(content=edit)
+            elif (await Servers.get_server(server_id=message.guild.id)).auto_run:
+                if results := (await self.auto_process(message)):
+                    edit = "\n".join(results)
+                    await response_message.edit(content=edit)
+
         except tortoise.exceptions.DoesNotExist:
             pass
 
