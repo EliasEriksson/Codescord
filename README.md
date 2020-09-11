@@ -1,7 +1,7 @@
 # Codescord
 
 #### Public host
-discord [invite link](https://discord.com/api/oauth2/authorize?client_id=749273748934230018&permissions=2048&scope=bot).
+discord [invite link](https://discord.com/api/oauth2/authorize?client_id=749273748934230018&permissions=128&scope=bot).
 
 #### Currently supported languages
 * python / py
