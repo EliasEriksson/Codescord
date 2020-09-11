@@ -362,19 +362,21 @@ class Client(Net):
 
             print("connection handled.")
             return stdout
+        # TODO add Protocol message and error handling for language not implemented
         except Errors.ProcessTimedOut:
             print(f"process took longer than {Protocol.timeout}s.")
-        except Errors.LanguageNotImplementedByServer as e:
-            print(f"language {e} is not implemented on the server.")
+            return f"Process took longer then {Protocol.timeout}s. Process was killed and did not finish."
         except Errors.NotImplementedByRecipient as e:
             print(f"{e} was not implemented on the server.")
+            return f"No execution procedure for language '{source.language}'."
         except Errors.NotImplementedInProtocol as e:
             print(f"{e} is not implemented in the servers protocol.")
+            return f"Fatal error: {e}. Contact developer at mail@eliaseriksson.eu"
         finally:
             connection.close()
 
     async def schedule_process(self, source: Source) -> str:
-        """
+        """det löste sig iaf.
         the preferred way of sending a processing request to a server in a docker container.
 
         :param source: source code to send.
