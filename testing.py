@@ -10,4 +10,4 @@ print(f"given sys args: {sys.argv}")
 
 import sys
 
-print(f"given sys args: {sys.argv}")
+print(sys.argv[1:])
