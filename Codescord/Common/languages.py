@@ -1,6 +1,7 @@
 from typing import *
 import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 
 async def subprocess(stdin: str) -> asyncio.subprocess.Process:
@@ -10,56 +11,56 @@ async def subprocess(stdin: str) -> asyncio.subprocess.Process:
 
 class Languages:
     @staticmethod
-    async def php(file: Union[Path, str]) -> bytes:
-        process = await subprocess(f"php -f {file}")
+    async def php(file: Union[Path, str], sys_args: str) -> bytes:
+        process = await subprocess(f"php -f {file} {sys_args}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def java(file: Union[Path, str]) -> bytes:
-        process = await subprocess(f"java {file}")
+    async def java(file: Union[Path, str], sys_args: str) -> bytes:
+        process = await subprocess(f"java {file} {sys_args}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def javascript(file: Union[Path, str]) -> bytes:
-        process = await subprocess(f"node {file}")
+    async def javascript(file: Union[Path, str], sys_args: str) -> bytes:
+        process = await subprocess(f"node {file} {sys_args}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def go(file: Union[Path, str]) -> bytes:
-        process = await subprocess(f"go run {file}")
+    async def go(file: Union[Path, str], sys_args: str) -> bytes:
+        process = await subprocess(f"go run {file} {sys_args}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def cpp(file: Union[Path, str]) -> bytes:
-        executable = "executable"
-        process = await subprocess(f"g++ -o {file.parent.joinpath(executable)} {file}")
+    async def cpp(file: Union[Path, str], sys_args: str) -> bytes:
+        executable = file.parent.joinpath(str(uuid4()))
+        process = await subprocess(f"g++ -o {executable} {file} {sys_args}")
         _, stderr = await process.communicate()
         if not process.returncode == 0:
             return stderr
 
-        process = await subprocess(f"{file.parent.joinpath(executable)}")
+        process = await subprocess(f"{executable}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def python(file: Union[Path, str]) -> bytes:
-        process = await subprocess(f"python3 {file}")
+    async def python(file: Union[Path, str], sys_args: str) -> bytes:
+        process = await subprocess(f"python3 {file} {sys_args}")
         stdout, stderr = await process.communicate()
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
-    async def c(file: Union[Path, str]) -> bytes:
-        executable = "executable"
-        process = await subprocess(f"gcc -o {file.parent.joinpath(executable)} {file}")
+    async def c(file: Union[Path, str], sys_args: str) -> bytes:
+        executable = file.parent.joinpath(str(uuid4()))
+        process = await subprocess(f"gcc -o {executable} {file} {sys_args}")
         _, stderr = await process.communicate()
         if not process.returncode == 0:
             return stderr
 
-        process = await subprocess(f"{file.parent.joinpath(executable)}")
+        process = await subprocess(f"{executable}")
         stdout, stderr = await process.communicate()
         if not process.returncode == 0:
             return stderr

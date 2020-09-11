@@ -114,9 +114,10 @@ class Client(discord.Client):
                     for source in sources
                 ]
                 results: List[str] = [
-                    f"{'`' * 3}\n{stdout}\n{'`' * 3}"
+                    (f"{'`' * 3}\n"
+                     f"{result if (result := await task) else 'Code gave no result but compiled and ran successfully.'}"
+                     f"\n{'`' * 3}")
                     for task in source_process_tasks
-                    if (stdout := await task)
                 ]
                 return results
 
@@ -150,9 +151,10 @@ class Client(discord.Client):
                     for source in sources
                 ]
                 results: List[str] = [
-                    f"{'`' * 3}\n{stdout}\n{'`' * 3}"
+                    (f"{'`' * 3}\n"
+                     f"{result if (result := await task) else 'Code gave no result but compiled and ran successfully.'}"
+                     f"\n{'`' * 3}")
                     for task in source_process_task
-                    if (stdout := await task)
                 ]
                 return results
 

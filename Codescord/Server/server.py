@@ -6,6 +6,7 @@ import socket
 import asyncio
 from pathlib import Path
 import tempfile
+from uuid import uuid4
 
 
 def setup_socket() -> socket.socket:
@@ -46,7 +47,7 @@ class Server(Net):
 
         self.instructions = {
             Protocol.Status.authenticate: self.authenticate,
-            Protocol.Status.file: self.handle_file,
+            Protocol.Status.file: self.download_source,
         }
 
         self.languages = get_language_map()
@@ -78,7 +79,7 @@ class Server(Net):
             await self.send_int_as_bytes(connection, Protocol.Status.not_implemented)
             raise Errors.NotImplementedInProtocol()
 
-    async def handle_file(self, connection: socket.socket) -> None:
+    async def download_source(self, connection: socket.socket) -> None:
         """
         handles the downloading and execution of a source file.
 
@@ -98,16 +99,21 @@ class Server(Net):
         language = (await self.download(connection)).decode("utf-8")
         if language in self.languages:
             await self.send_int_as_bytes(connection, Protocol.Status.success)
+
             code = await self.download(connection)
             await self.send_int_as_bytes(connection, Protocol.Status.success)
+
+            sys_args = (await self.download(connection)).decode("utf-8")
+            await self.send_int_as_bytes(connection, Protocol.Status.success)
+
             await self.assert_response_status(connection, Protocol.Status.awaiting)
 
             with tempfile.TemporaryDirectory() as tempdir:
-                file = Path(tempdir).joinpath(f"script.{language}")
+                file = Path(tempdir).joinpath(f"{str(uuid4())}.{language}")
                 with open(file, "wb") as script:
                     script.write(code)
                 try:
-                    stdout = await asyncio.wait_for(self.languages[language](file), Protocol.timeout)
+                    stdout = await asyncio.wait_for(self.languages[language](file, sys_args), Protocol.timeout)
                 except asyncio.TimeoutError:
                     await self.send_int_as_bytes(connection, Protocol.Status.process_timeout)
                     raise Errors.ProcessTimedOut(f"process took longer than {Protocol.timeout}")
