@@ -42,11 +42,11 @@ class QueuedPool:
     """
     a processing pool with first in first out queue to entry.
 
-    this functions as bottle neck depending on the amount of ports availeble for
+    this functions acts as a bottle neck depending on the amount of ports available for
     this program specified with -p option when running main.py.
 
     this pool will continuously look for processes that have been added to the internal queue
-    if there is a port availeble for a container to start the process it will be put in a pending state.
+    if there is a port available for a container to start the process it will be put in a pending state.
     once the process is finished the port will be released and the process will be removed from its pending
     state freeing up another spot for another process to be queued.
     """
@@ -284,7 +284,7 @@ class Client(Net):
         await self.upload(connection, payload)
         print("authenticated.")
 
-    async def handle_source(self, connection: socket.socket, source: Source) -> None:
+    async def upload_source(self, connection: socket.socket, source: Source) -> None:
         """
         handles the sending of the source file.
 
@@ -298,14 +298,23 @@ class Client(Net):
         await self.send_int_as_bytes(connection, Protocol.Status.file)
         await self.assert_response_status(connection, Protocol.Status.success)
 
+        print(source)
+        print("uploading the language payload...")
         payload = source.language.encode("utf-8")
         await self.upload(connection, payload)
+        print("uploaded the language payload.")
 
+        print("uploading the code payload...")
         payload = source.code.encode("utf-8")
+        await self.upload(connection, payload)
+        print("uploaded the code payload.")
+
+        print()
+        payload = source.sys_args.encode("utf-8")
         await self.upload(connection, payload)
         print("source handled.")
 
-    async def handle_stdout(self, connection: socket.socket) -> str:
+    async def download_stdout(self, connection: socket.socket) -> str:
         """
         handles the receiving of the stdout from the server when processing the source file.
 
@@ -341,10 +350,10 @@ class Client(Net):
         print("handling the connection...")
         try:
             await self.authenticate(connection)
-            await self.handle_source(connection, source)
+            await self.upload_source(connection, source)
 
             await self.send_int_as_bytes(connection, Protocol.Status.awaiting)
-            stdout = await self.handle_stdout(connection)
+            stdout = await self.download_stdout(connection)
             await self.assert_response_status(connection, Protocol.Status.awaiting)
 
             print("client starting to send close")
@@ -396,7 +405,7 @@ class Client(Net):
             await self.loop.sock_connect(connection, address)
             print(f"connected to {address}.")
             stdout = await self.handle_connection(connection, source)
-            return stdout if stdout else "There was an error processing the source."
+            return stdout
         except KeyboardInterrupt:
             print(self.loop.is_closed())
         except (ConnectionRefusedError, ConnectionResetError):
