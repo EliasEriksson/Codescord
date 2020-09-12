@@ -20,8 +20,8 @@ PRs are welcome :)
 ## Usage
 There are two ways to execute highlighted code blocks. This is a setting and can be changed
  with `/codescord auto-run on`. \
- OBS! The first text after the tipple \``` is what determines how the code will be run on the server side.
-` ```python` for python ` ```c++` for c++ etc. \
+ OBS! The first text after the tipple \`\`\` is what determines how the code will be run on the server side.
+ ` ```python` for python  ` ```c++` for c++ etc. \
 OBS! a new line after the language name is required. see usage and example bellow.
 ### Manual run (default)
 If disabled it can be re-enabled with `/codescord auto-run off`
