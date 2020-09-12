@@ -376,7 +376,7 @@ class Client(Net):
             connection.close()
 
     async def schedule_process(self, source: Source) -> str:
-        """det löste sig iaf.
+        """
         the preferred way of sending a processing request to a server in a docker container.
 
         :param source: source code to send.
