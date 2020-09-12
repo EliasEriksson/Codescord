@@ -63,8 +63,8 @@ class Client(discord.Client):
         loop = loop if not loop else asyncio.get_event_loop()
         super(Client, self).__init__(loop=loop)
         self.codescord_client = Codescord.Client(start_port, end_port, loop)
-        self.manual_pattern = re.compile(r"/run\s*([^\n]*)\s*(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
-        self.auto_pattern = re.compile(r"(?<!\\)`{3}(\w+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
+        self.manual_pattern = re.compile(r"/run\s*([^\n]*)\s*(?<!\\)`{3}([^\n]+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
+        self.auto_pattern = re.compile(r"(?<!\\)`{3}([^\n]+)\n((?:(?!`{3}).)+)`{3}", re.DOTALL)
         self.used_ports: Set[int] = set()
         self.used_ids: Set[str] = set()
 

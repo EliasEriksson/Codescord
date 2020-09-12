@@ -21,9 +21,9 @@ PRs are welcome :)
 There are two ways to execute highlighted code blocks. This is a setting and can be changed
  with `/codescord auto-run on`. \
  OBS! The first text after the tipple \``` is what determines how the code will be run on the server side.
-\```python for python \```c++ for c++. \
+` ```python` for python ` ```c++` for c++ etc. \
 OBS! a new line after the language name is required. see usage and example bellow.
-##### Manual run (default)
+### Manual run (default)
 If disabled it can be re-enabled with `/codescord auto-run off`
 To execute a highlighted code block in this setting simply use:
 ###### Raw text:
@@ -40,7 +40,7 @@ import sys
 print(sys.argv[1:] if len(sys.argv) > 1 else "No sys args")
 ```
 ````
-##### Automatic run
+### Automatic run
 To enable this feature run: `/codescord auto-run on` in one of your servers 
 text channels the bot can read. When it is enabled 
 simply send a discord message with a highlighted code block.
