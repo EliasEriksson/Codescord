@@ -55,6 +55,7 @@ class Server(Net):
             "py": Languages.python,
             "c++": Languages.cpp,
             "js": Languages.javascript,
+            "c#": Languages.cs
         })
 
     async def authenticate(self, connection: socket.socket) -> None:

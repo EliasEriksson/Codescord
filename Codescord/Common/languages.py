@@ -47,6 +47,29 @@ class Languages:
         return stdout if process.returncode == 0 else stderr
 
     @staticmethod
+    async def cs(file: Union[Path, str], sys_args: str) -> bytes:
+        cs_project = file.parent.joinpath("cs")
+
+        process = await subprocess(f"dotnet new console --output {cs_project}")
+        _, stderr = await process.communicate()
+        if not process.returncode == 0:
+            return stderr
+
+        process = await subprocess(f"mv {file} {cs_project.joinpath(file.name)}")
+        _, stderr = await process.communicate()
+        if not process.returncode == 0:
+            return stderr
+
+        process = await subprocess(f"rm {cs_project.joinpath('Program.cs')}")
+        _, stderr = await process.communicate()
+        if not process.returncode == 0:
+            return stderr
+
+        process = await subprocess(f"dotnet run --project {cs_project} {sys_args}")
+        stdout, stderr = await process.communicate()
+        return stdout if process.returncode == 0 else stderr
+
+    @staticmethod
     async def python(file: Union[Path, str], sys_args: str) -> bytes:
         process = await subprocess(f"python3 {file} {sys_args}")
         stdout, stderr = await process.communicate()
